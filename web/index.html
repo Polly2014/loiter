@@ -86,6 +86,26 @@
   }
   #empty .big { font-size: 22px; color: var(--green); text-shadow: 0 0 10px rgba(51,255,119,0.4); }
   #empty.hidden { opacity: 0; pointer-events: none; }
+
+  /* ---- 成就 toast ---- */
+  #ach {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.8);
+    z-index: 60; pointer-events: none;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    padding: 28px 44px;
+    background: rgba(8, 16, 10, 0.94);
+    border: 2px solid var(--amber);
+    border-radius: 10px;
+    box-shadow: 0 0 40px rgba(255, 204, 68, 0.45), inset 0 0 24px rgba(255, 204, 68, 0.12);
+    opacity: 0; transition: opacity 0.3s, transform 0.3s;
+    text-align: center;
+  }
+  #ach.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  #ach .emoji { font-size: 56px; line-height: 1; filter: drop-shadow(0 0 12px rgba(255,204,68,0.6)); }
+  #ach .label { font-size: 12px; letter-spacing: 4px; color: var(--amber); }
+  #ach .title { font-size: 26px; color: var(--green); text-shadow: 0 0 12px rgba(51,255,119,0.5); }
+  #ach .who   { font-size: 13px; color: var(--green-dim); }
+  #ach .desc  { font-size: 13px; color: var(--green-dim); }
 </style>
 </head>
 <body>
@@ -107,6 +127,14 @@
 
   <div id="log"></div>
   <div id="crt"></div>
+
+  <div id="ach">
+    <div class="emoji"></div>
+    <div class="label">ACHIEVEMENT UNLOCKED</div>
+    <div class="title"></div>
+    <div class="who"></div>
+    <div class="desc"></div>
+  </div>
 
 <script>
 (() => {
@@ -168,6 +196,29 @@
         if (av.grid[y][x]) ctx.fillRect(ox + x * cell, oy + y * cell, cell - 1, cell - 1);
       }
     }
+    ctx.restore();
+  }
+
+  // AI 头像：把下发的 PNG 画成圆角方块 + 发光边
+  function drawImageAvatar(n, cx, cy, cell, alpha) {
+    const size = 5 * cell;
+    const ox = cx - size / 2;
+    const oy = cy - size / 2;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = n.av.glow;
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    roundRect(ox, oy, size, size, Math.max(3, cell));
+    ctx.clip();
+    ctx.drawImage(n.img, ox, oy, size, size);
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = n.av.color;
+    ctx.lineWidth = 1.5;
+    roundRect(ox, oy, size, size, Math.max(3, cell));
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -246,7 +297,11 @@
       const wx = n.x + Math.cos(t * 0.0004 * n.speed + n.phase) * n.drift;
       const wy = n.y + Math.sin(t * 0.0005 * n.speed + n.phase * 1.3) * n.drift;
 
-      drawAvatar(n.av, wx, wy, cell, alpha);
+      if (n.img && n.img.complete && n.img.naturalWidth) {
+        drawImageAvatar(n, wx, wy, cell, alpha);
+      } else {
+        drawAvatar(n.av, wx, wy, cell, alpha);
+      }
 
       // 昵称
       ctx.save();
@@ -338,6 +393,11 @@
     (d.members || []).forEach((m) => {
       const n = spawnNode(m.uid, m.nick);
       n.born = performance.now() - 1000; // 已在场的不弹出
+      if (m.png_b64) { // 重连后从快照恢复 AI 头像，不必重新生成
+        const img = new Image();
+        img.onload = () => { n.img = img; };
+        img.src = "data:image/png;base64," + m.png_b64;
+      }
     });
     updateHud();
     pushLog(`<span class="sys">系统</span> 快照载入 · 在线 ${members.size}`);
@@ -379,7 +439,37 @@
       case "status":
         // 心跳：仅用于校准计数（以快照/join/leave 为准，这里不强改）
         break;
+      case "achievement": {
+        const n = members.get(d.uid);
+        if (n) n.pop = 1;
+        pushLog(`<span class="sys">★ 成就</span> <span class="nick">${esc(d.nick || d.uid)}</span> 解锁「${esc(d.title)}」`);
+        showAchievement(d);
+        break;
+      }
+      case "avatar": {
+        const n = members.get(d.uid);
+        if (n && d.png_b64) {
+          const img = new Image();
+          img.onload = () => { n.img = img; n.pop = 1; };
+          img.src = "data:image/png;base64," + d.png_b64;
+          pushLog(`<span class="sys">◈ 头像</span> <span class="nick">${esc(d.nick || d.uid)}</span> 点亮了新脸`);
+        }
+        break;
+      }
     }
+  }
+
+  // ===================== 成就 toast =====================
+  let achTimer = null;
+  function showAchievement(d) {
+    const box = $("ach");
+    box.querySelector(".emoji").textContent = d.emoji || "★";
+    box.querySelector(".title").textContent = d.title || "";
+    box.querySelector(".who").textContent = (d.nick || d.uid) + " — 点亮成就";
+    box.querySelector(".desc").textContent = d.desc || "";
+    box.classList.add("show");
+    if (achTimer) clearTimeout(achTimer);
+    achTimer = setTimeout(() => box.classList.remove("show"), 3800);
   }
 
   // ===================== WebSocket =====================

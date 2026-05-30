@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
@@ -80,7 +81,13 @@ async def ws_endpoint(ws: WebSocket):
     await ws.send_json({"type": "snapshot", **room.snapshot()})
     try:
         while True:
-            await ws.receive_text()  # 大屏暂为只读，丢弃入站
+            try:
+                # 大屏只读、永不发消息 → 此 WS 完全空闲。
+                # Cloudflare tunnel 会按 idle timeout 切断空闲 WebSocket，
+                # 所以每 20s 无入站就主动发心跳保活（前端忽略 type=ping）。
+                await asyncio.wait_for(ws.receive_text(), timeout=20.0)
+            except asyncio.TimeoutError:
+                await ws.send_json({"type": "ping", "ts": int(time.time() * 1000)})
     except WebSocketDisconnect:
         pass
     finally:

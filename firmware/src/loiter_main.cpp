@@ -20,6 +20,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include "mbedtls/base64.h"
 #include "config.h"
 
 // ============================================================
@@ -39,6 +40,10 @@ static bool     gMqttUp  = false;
 static String   gInput   = "";              // 当前输入行
 static uint32_t gLastMqttTry = 0;           // 非阻塞重连节流
 static uint32_t gLastWifiTry = 0;
+static uint32_t gToastUntil  = 0;           // 成就 toast 到期时间（0=无）
+
+static uint8_t  gAvatar[32];                // 16×16 1-bit 头像位图（行 MSB 在前）
+static bool     gHasAvatar = false;
 
 // ---- 屏幕布局（240×135, rotation 1, textSize 1 ≈ 40 列 × 16 行）----
 static const int CHAR_W   = 6;
@@ -110,6 +115,39 @@ static void redrawAll() {
     drawInput();
 }
 
+// 成就 toast — 非阻塞横幅，3s 后由 loop() 还原界面
+static void drawToast(const String& title, const String& desc) {
+    auto& d = M5Cardputer.Display;
+    const int y = 38, h = 54;
+    d.fillRect(0, y, 240, h, TFT_YELLOW);
+    d.drawRect(3, y + 3, 234, h - 6, TFT_BLACK);
+    d.setTextColor(TFT_BLACK, TFT_YELLOW);
+    d.setCursor(10, y + 9);  d.print("*  ACHIEVEMENT  *");
+    d.setCursor(10, y + 24); d.print(title);
+    d.setCursor(10, y + 38); d.print(desc);
+    gToastUntil = millis() + 3000;
+}
+
+// AI 头像 toast — 把 16×16 1-bit 放大 ×4（64×64）居中预览，3s 后还原
+static void drawAvatarToast() {
+    auto& d = M5Cardputer.Display;
+    const int scale = 4, side = 16 * scale;          // 64
+    const int x = (240 - side) / 2, y = (135 - side) / 2 - 2;
+    d.fillRect(x - 8, y - 14, side + 16, side + 22, TFT_BLACK);
+    d.drawRect(x - 8, y - 14, side + 16, side + 22, TFT_GREEN);
+    d.setTextColor(TFT_GREEN, TFT_BLACK);
+    d.setCursor(x - 4, y - 11); d.print("YOUR FACE");
+    for (int row = 0; row < 16; row++) {
+        for (int col = 0; col < 16; col++) {
+            // 服务端已反色：bit 1 = 主体（亮白前景）、bit 0 = 背景（纯黑融入 toast）
+            int bit = (gAvatar[row * 2 + (col >> 3)] >> (7 - (col & 7))) & 1;
+            uint16_t c = bit ? TFT_WHITE : TFT_BLACK;
+            d.fillRect(x + col * scale, y + row * scale, scale, scale, c);
+        }
+    }
+    gToastUntil = millis() + 4000;
+}
+
 // ============================================================
 // MQTT
 // ============================================================
@@ -141,6 +179,23 @@ static void publishMsg(const String& text) {
     mqtt.publish(msgTopic(gChannel).c_str(), (const uint8_t*)buf, n, false);
 }
 
+// /face <keywords> → 请求服务端生成 AI 头像
+static void publishAvatarRequest(const String& kw) {
+    JsonDocument doc;
+    doc["uid"] = gUid;
+    JsonArray arr = doc["keywords"].to<JsonArray>();
+    int start = 0;
+    for (int i = 0; i <= (int)kw.length(); i++) {
+        if (i == (int)kw.length() || kw[i] == ' ') {
+            if (i > start) arr.add(kw.substring(start, i));
+            start = i + 1;
+        }
+    }
+    char buf[256];
+    size_t n = serializeJson(doc, buf, sizeof(buf));
+    mqtt.publish(topic("avatar/request").c_str(), (const uint8_t*)buf, n, false);
+}
+
 static void onMqttMessage(char* topicC, byte* payload, unsigned int len) {
     JsonDocument doc;
     if (deserializeJson(doc, payload, len)) return;   // 坏 JSON 直接丢
@@ -154,6 +209,29 @@ static void onMqttMessage(char* topicC, byte* payload, unsigned int len) {
     if (tp.startsWith("loiter/hall/sys/")) {
         String text = doc["text"] | "";
         if (text.length()) { pushLog("* " + text, TFT_MAGENTA); drawLog(); }
+        return;
+    }
+    if (tp.startsWith("loiter/hall/achievement/")) {
+        String title = doc["title"] | "";
+        String desc  = doc["desc"]  | "";
+        pushLog("[\u6210\u5c31] " + title, TFT_YELLOW);
+        drawToast(title, desc);
+        return;
+    }
+    if (tp.startsWith("loiter/hall/avatar/")) {
+        const char* b64 = doc["bitmap_b64"] | "";
+        size_t olen = 0;
+        if (strlen(b64) &&
+            mbedtls_base64_decode(gAvatar, sizeof(gAvatar), &olen,
+                                  (const uint8_t*)b64, strlen(b64)) == 0 &&
+            olen == sizeof(gAvatar)) {
+            gHasAvatar = true;
+            pushLog("[\u5934\u50cf] \u65b0\u8138\u5df2\u751f\u6210", TFT_GREEN);
+            drawAvatarToast();
+        } else {
+            pushLog("! \u5934\u50cf\u89e3\u7801\u5931\u8d25", TFT_RED);
+            drawLog();
+        }
         return;
     }
     if (tp.startsWith("loiter/hall/msg/")) {
@@ -194,6 +272,8 @@ static void mqttEnsure() {
         mqtt.subscribe("loiter/hall/msg/#", 1);   // QoS 1：broker 重启瞬间不丢消息
         mqtt.subscribe("loiter/hall/status", 0);  // 心跳丢一拍无所谓
         mqtt.subscribe("loiter/hall/sys/#", 1);
+        mqtt.subscribe(("loiter/hall/achievement/" + gUid).c_str(), 1);  // QoS 1：成就解锁不丢
+        mqtt.subscribe(("loiter/hall/avatar/" + gUid).c_str(), 1);       // QoS 1：头像位图不丢
         publishJoin();
         pushLog("* connected as " + gNick, TFT_GREEN);
         drawLog(); drawStatus();
@@ -244,6 +324,18 @@ static void handleEnter() {
         drawStatus(); drawInput();
         return;
     }
+    // 命令：/face <keywords> 生成 AI 头像
+    if (line.startsWith("/face ")) {
+        String kw = line.substring(6); kw.trim();
+        if (kw.length() && gMqttUp) {
+            publishAvatarRequest(kw);
+            pushLog("* 生成头像中… " + kw, TFT_DARKGREY);
+        } else if (!gMqttUp) {
+            pushLog("! 离线，无法生成", TFT_RED);
+        }
+        drawLog(); drawInput();
+        return;
+    }
 
     // 普通消息
     if (gMqttUp) {
@@ -287,7 +379,7 @@ void setup() {
 
     redrawAll();
     pushLog("== LOITER ==  uid=" + gUid, TFT_GREEN);
-    pushLog("Tab=频道 Enter=发送 /nick改名", TFT_DARKGREY);
+    pushLog("Tab=频道 Enter=发送 /nick改名 /face头像", TFT_DARKGREY);
     drawLog();
 
     WiFi.mode(WIFI_STA);
@@ -304,4 +396,9 @@ void loop() {
     if (gWifiUp) mqttEnsure();
     mqtt.loop();
     handleKeyboard();
+    // 成就 toast 到期 → 还原界面（非阻塞）
+    if (gToastUntil && (int32_t)(millis() - gToastUntil) >= 0) {
+        gToastUntil = 0;
+        redrawAll();
+    }
 }

@@ -19,6 +19,7 @@ class Member:
     joined_at: int
     msg_count: int = 0
     last_seen: int = field(default_factory=now_ms)
+    png_b64: str = ""  # 大屏 AI 头像（彩色 PNG base64），重连后从快照恢复
 
 
 class Room:
@@ -43,6 +44,12 @@ class Room:
 
     def leave(self, uid: str) -> Member | None:
         return self.members.pop(uid, None)
+
+    def set_avatar(self, uid: str, png_b64: str) -> None:
+        """记住成员的 AI 头像，让重连大屏能从快照恢复，不必重新生成。"""
+        m = self.members.get(uid)
+        if m is not None:
+            m.png_b64 = png_b64
 
     def record_msg(self, uid: str) -> Member | None:
         m = self.members.get(uid)
@@ -69,6 +76,7 @@ class Room:
                     "nick": m.nick,
                     "joined_at": m.joined_at,
                     "msg_count": m.msg_count,
+                    "png_b64": m.png_b64,
                 }
                 for m in self.members.values()
             ],
