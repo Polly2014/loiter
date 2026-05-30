@@ -42,10 +42,12 @@ class AvatarResult:
 def _build_prompt(keywords: list[str]) -> str:
     kw = ", ".join(k.strip() for k in keywords if k and k.strip()) or "a friendly robot"
     return (
-        f"High-contrast black and white pixel-art avatar icon of {kw}, "
-        "centered subject, bold simple shapes, thick clean outlines, "
-        "plain white background, retro terminal monochrome style, "
-        "easy to read at tiny size"
+        f"Cute chibi anime character of {kw}, "
+        "2-head-to-body ratio, round face, big expressive eyes, "
+        "warm cream and pastel color palette, soft watercolor texture, "
+        "simple clean background in light beige (#f5efe0), "
+        "Studio Ghibli inspired warmth, gentle afternoon sunlight feel, "
+        "centered composition, full body visible"
     )
 
 
