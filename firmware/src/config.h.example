@@ -1,0 +1,27 @@
+// config.h — 固件本地配置（从本文件拷贝：cp config.h.example config.h 后填入真实值）
+// ⚠️ config.h 已被 .gitignore，绝不提交真实 WiFi 密码到公开 repo。
+
+#pragma once
+
+// ============================================================
+// 验证路径 A（推荐）：Cardputer 和 Mac 共用「家庭 WiFi」
+//   - Mac 不断网，不用碰 Internet Sharing
+//   - 两者同一局域网，Cardputer 直接连 Mac 上的 broker
+//   - 把 WIFI_SSID/PASS 改成你家路由器的；MQTT_HOST 填 Mac 当前局域网 IP
+// ============================================================
+#define WIFI_SSID     "YOUR_WIFI_SSID"      // ← 改成你家路由器 SSID
+#define WIFI_PASS     "YOUR_WIFI_PASSWORD"  // ← 改成你家路由器密码
+#define MQTT_HOST     "192.168.x.x"         // ← Mac 在局域网上的 IP（en0：ipconfig getifaddr en0）
+#define MQTT_PORT     1883
+
+// ============================================================
+// 验证路径 B（活动现场）：Mac 自建热点
+//   - 一张 WiFi 网卡不能同时上网 + 当热点 → Mac 会断网
+//   - 现场：USB-C 网口/手机 USB 给 Mac 上行，WiFi 当热点；
+//     或旅行路由器当 AP，Mac 网线连它
+//   - 用这条路径时改成：
+//       WIFI_SSID "loiter" / WIFI_PASS "loiter1234" / MQTT_HOST "192.168.2.1"
+// ============================================================
+
+// ---- 本机身份 ----
+#define DEV_NICK      "cardputer-0"      // 临时昵称（/nick 可改）
