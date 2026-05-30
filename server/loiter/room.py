@@ -20,6 +20,7 @@ class Member:
     msg_count: int = 0
     last_seen: int = field(default_factory=now_ms)
     png_b64: str = ""  # 大屏 AI 头像（彩色 PNG base64），重连后从快照恢复
+    current_channel: str = "main"  # 当前所在频道（msg 时更新），大屏 ring/昵称色用
 
 
 class Room:
@@ -51,11 +52,12 @@ class Room:
         if m is not None:
             m.png_b64 = png_b64
 
-    def record_msg(self, uid: str) -> Member | None:
+    def record_msg(self, uid: str, channel: str = "main") -> Member | None:
         m = self.members.get(uid)
         if m is not None:
             m.msg_count += 1
             m.last_seen = now_ms()
+            m.current_channel = channel
         self.total_messages += 1
         return m
 
@@ -77,6 +79,7 @@ class Room:
                     "joined_at": m.joined_at,
                     "msg_count": m.msg_count,
                     "png_b64": m.png_b64,
+                    "current_channel": m.current_channel,
                 }
                 for m in self.members.values()
             ],

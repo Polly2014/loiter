@@ -12,6 +12,10 @@
     --green-faint: #0d3a1f;
     --amber: #ffcc44;
     --pink: #ff5f9e;
+    /* 频道主题色（与 JS 里 CHANNEL_COLORS 保持同步） */
+    --ch-main: #33ff77;     /* 主厅：终端绿 */
+    --ch-fishing: #5bc0eb;  /* 摸鱼：湖蓝 */
+    --ch-help: #f4a261;     /* 求助：橘黄 */
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); }
@@ -36,6 +40,11 @@
   #topbar .brand .blink { animation: blink 1.1s steps(1) infinite; }
   #topbar .stat { font-size: 13px; color: var(--green-dim); }
   #topbar .stat b { color: var(--green); font-size: 15px; }
+  #topbar .chan { font-size: 12px; padding: 2px 8px; border-radius: 3px; letter-spacing: 1.5px; }
+  #topbar .chan.main    { color: var(--ch-main);    border: 1px solid var(--ch-main);    text-shadow: 0 0 6px rgba(51,255,119,0.5); }
+  #topbar .chan.fishing { color: var(--ch-fishing); border: 1px solid var(--ch-fishing); text-shadow: 0 0 6px rgba(91,192,235,0.5); }
+  #topbar .chan.help    { color: var(--ch-help);    border: 1px solid var(--ch-help);    text-shadow: 0 0 6px rgba(244,162,97,0.5); }
+  #topbar .chan.empty   { opacity: 0.28; text-shadow: none; }
   #topbar .spacer { flex: 1; }
   #conn { font-size: 12px; padding: 3px 10px; border: 1px solid var(--green-dim); border-radius: 3px; }
   #conn.ok { color: var(--green); border-color: var(--green-dim); }
@@ -114,6 +123,9 @@
     <span class="stat">ROOM <b id="room">hall</b></span>
     <span class="stat">在线 <b id="count">0</b></span>
     <span class="stat">消息 <b id="msgs">0</b></span>
+    <span class="chan main empty"    id="ch-main">#MAIN 0</span>
+    <span class="chan fishing empty" id="ch-fishing">#FISHING 0</span>
+    <span class="chan help empty"    id="ch-help">#HELP 0</span>
     <span class="spacer"></span>
     <span id="conn" class="bad">CONNECTING…</span>
   </div>
@@ -222,6 +234,34 @@
     ctx.restore();
   }
 
+  // 频道色 ring：套在头像外圈，让一眼看出每个人在哪个频道
+  function drawChannelRing(channel, cx, cy, cell, alpha) {
+    const cc = chanColor(channel);
+    const size = 5 * cell;
+    const pad = 4;
+    const ox = cx - size / 2 - pad;
+    const oy = cy - size / 2 - pad;
+    const w = size + pad * 2;
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.85;
+    ctx.strokeStyle = cc.stroke;
+    ctx.shadowColor = cc.glow;
+    ctx.shadowBlur = 10;
+    ctx.lineWidth = 2;
+    roundRect(ox, oy, w, w, Math.max(5, cell + 2));
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // ===================== 频道色（与 CSS --ch-* 同步） =====================
+  const CHANNELS = ["main", "fishing", "help"];
+  const CHANNEL_COLORS = {
+    main:    { stroke: "#33ff77", glow: "rgba(51,255,119,0.55)", fill: "rgba(8, 20, 12, 0.92)" },
+    fishing: { stroke: "#5bc0eb", glow: "rgba(91,192,235,0.55)", fill: "rgba(8, 16, 24, 0.92)" },
+    help:    { stroke: "#f4a261", glow: "rgba(244,162,97,0.55)", fill: "rgba(24, 16, 8, 0.92)" },
+  };
+  const chanColor = (ch) => CHANNEL_COLORS[ch] || CHANNEL_COLORS.main;
+
   // ===================== 状态 =====================
   const members = new Map(); // uid -> node
   let totalMessages = 0;
@@ -252,8 +292,9 @@
       drift: 18 + rnd() * 22,
       born: performance.now(),
       leaving: 0,
-      bubble: null, // {text, until}
+      bubble: null, // {text, until, channel}
       pop: 0,
+      channel: "main", // 当前所在频道；msg 时更新；通过 ring/昵称/气泡色体现
     };
     members.set(uid, node);
     return node;
@@ -303,18 +344,24 @@
         drawAvatar(n.av, wx, wy, cell, alpha);
       }
 
-      // 昵称
+      // 频道 ring（套在头像外，颜色 = 当前所在频道）
+      drawChannelRing(n.channel, wx, wy, cell, alpha);
+
+      // 昵称（用频道色，统一识别）
+      const cc = chanColor(n.channel);
       ctx.save();
-      ctx.globalAlpha = alpha * 0.9;
-      ctx.fillStyle = n.av.color;
+      ctx.globalAlpha = alpha * 0.95;
+      ctx.fillStyle = cc.stroke;
+      ctx.shadowColor = cc.glow;
+      ctx.shadowBlur = 4;
       ctx.font = "12px monospace";
       ctx.textAlign = "center";
-      ctx.fillText(n.nick, wx, wy + 5 * cell / 2 + 16);
+      ctx.fillText(n.nick, wx, wy + 5 * cell / 2 + 20);
       ctx.restore();
 
-      // 聊天气泡
+      // 聊天气泡（用气泡发出时的频道色）
       if (n.bubble && now < n.bubble.until) {
-        drawBubble(n.bubble.text, wx, wy - 5 * cell / 2 - 10, alpha);
+        drawBubble(n.bubble.text, wx, wy - 5 * cell / 2 - 10, alpha, n.bubble.channel || n.channel);
       } else if (n.bubble) {
         n.bubble = null;
       }
@@ -328,28 +375,35 @@
     return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
   }
 
-  function drawBubble(text, cx, cy, alpha) {
-    const t = text.length > 36 ? text.slice(0, 35) + "…" : text;
+  function drawBubble(text, cx, cy, alpha, channel) {
+    const cc = chanColor(channel);
+    const tag = (channel && channel !== "main") ? "#" + channel + " " : "";
+    const body = text.length > 36 ? text.slice(0, 35) + "…" : text;
+    const t = tag + body;
     ctx.save();
     ctx.font = "13px monospace";
     const w = ctx.measureText(t).width + 16;
     const h = 24;
     const x = cx - w / 2, y = cy - h;
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = "rgba(8, 20, 12, 0.92)";
-    ctx.strokeStyle = "#33ff77";
+    ctx.fillStyle = cc.fill;
+    ctx.strokeStyle = cc.stroke;
+    ctx.shadowColor = cc.glow;
+    ctx.shadowBlur = 6;
     ctx.lineWidth = 1;
     roundRect(x, y, w, h, 4);
     ctx.fill(); ctx.stroke();
+    ctx.shadowBlur = 0;
     // 小尾巴
     ctx.beginPath();
     ctx.moveTo(cx - 5, y + h);
     ctx.lineTo(cx + 5, y + h);
     ctx.lineTo(cx, y + h + 6);
     ctx.closePath();
-    ctx.fillStyle = "rgba(8, 20, 12, 0.92)";
+    ctx.fillStyle = cc.fill;
     ctx.fill();
-    ctx.fillStyle = "#aaffcc";
+    // 文字
+    ctx.fillStyle = cc.stroke;
     ctx.textAlign = "center";
     ctx.fillText(t, cx, y + 16);
     ctx.restore();
@@ -383,6 +437,15 @@
     $("count").textContent = members.size;
     $("msgs").textContent = totalMessages;
     $("empty").classList.toggle("hidden", members.size > 0);
+    // 频道分项：按各成员当前 channel 计数
+    const counts = { main: 0, fishing: 0, help: 0 };
+    for (const n of members.values()) counts[n.channel] = (counts[n.channel] || 0) + 1;
+    for (const ch of CHANNELS) {
+      const el = $("ch-" + ch);
+      if (!el) continue;
+      el.textContent = "#" + ch.toUpperCase() + " " + counts[ch];
+      el.classList.toggle("empty", counts[ch] === 0);
+    }
   }
 
   // ===================== 事件处理 =====================
@@ -393,6 +456,7 @@
     (d.members || []).forEach((m) => {
       const n = spawnNode(m.uid, m.nick);
       n.born = performance.now() - 1000; // 已在场的不弹出
+      n.channel = m.current_channel || "main"; // 从快照恢复频道，刷新不会全变主厅绿
       if (m.png_b64) { // 重连后从快照恢复 AI 头像，不必重新生成
         const img = new Image();
         img.onload = () => { n.img = img; };
@@ -427,12 +491,14 @@
       case "msg": {
         totalMessages++;
         const n = members.get(d.uid);
+        const ch = d.channel || "main";
         if (n) {
-          n.bubble = { text: d.text, until: performance.now() + 5000 };
+          n.channel = ch; // 发消息 = 你当前在那个频道
+          n.bubble = { text: d.text, until: performance.now() + 5000, channel: ch };
           n.pop = 1;
         }
-        const ch = d.channel && d.channel !== "main" ? `<span class="sys">#${esc(d.channel)}</span> ` : "";
-        pushLog(`${ch}<span class="nick">${esc(d.nick)}</span>: ${esc(d.text)}`);
+        const chTag = ch !== "main" ? `<span class="sys">#${esc(ch)}</span> ` : "";
+        pushLog(`${chTag}<span class="nick">${esc(d.nick)}</span>: ${esc(d.text)}`);
         updateHud();
         break;
       }

@@ -126,7 +126,7 @@ class MqttBridge:
         # 服务端重启后真机不会重发 join，能发消息就当在场，幂等补一下
         if uid not in self.room.members:
             self._handle_join({"uid": uid, "nick": data.get("nick") or uid})
-        m = self.room.record_msg(uid)
+        m = self.room.record_msg(uid, channel)
         nick = (m.nick if m else data.get("nick")) or "anon"
         log.info("MSG[%s] %s: %s", channel, nick, text)
         self._emit({
