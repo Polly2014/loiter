@@ -42,12 +42,13 @@ class AvatarResult:
 def _build_prompt(keywords: list[str]) -> str:
     kw = ", ".join(k.strip() for k in keywords if k and k.strip()) or "a friendly robot"
     return (
-        f"Cute chibi anime character of {kw}, "
-        "2-head-to-body ratio, round face, big expressive eyes, "
-        "warm cream and pastel color palette, soft watercolor texture, "
-        "simple clean background in light beige (#f5efe0), "
-        "Studio Ghibli inspired warmth, gentle afternoon sunlight feel, "
-        "centered composition, full body visible"
+        f"Chinese ink wash painting (水墨画) style character portrait of {kw}, "
+        "single character in traditional ink brush strokes, "
+        "elegant and minimal, visible brush texture, "
+        "rice paper background (#f0ebe0), vermillion red (朱砂) accent touches, "
+        "3/4 view, full body, centered composition, "
+        "traditional Chinese painting meets modern character design, "
+        "clean edges suitable for game avatar"
     )
 
 
