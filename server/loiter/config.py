@@ -9,6 +9,9 @@ PROTOCOL_VERSION = "v1"
 MQTT_HOST = os.getenv("LOITER_MQTT_HOST", "127.0.0.1")
 MQTT_PORT = int(os.getenv("LOITER_MQTT_PORT", "1883"))
 MQTT_KEEPALIVE = int(os.getenv("LOITER_MQTT_KEEPALIVE", "60"))
+# 鉴权（公网部署必填；空字符串 = 匿名，仅供本地开发）
+MQTT_USER = os.getenv("LOITER_MQTT_USER", "").strip()
+MQTT_PASS = os.getenv("LOITER_MQTT_PASS", "").strip()
 
 # --- 房间 ---
 ROOM = os.getenv("LOITER_ROOM", "hall")

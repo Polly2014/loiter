@@ -266,7 +266,9 @@ static void mqttEnsure() {
     String willTopic = topic("leave");
 
     // willQos=1：与 docs/mqtt-protocol.md 对齐（LWT QoS=1，掉线 leave 不丢）
-    if (mqtt.connect(gUid.c_str(), willTopic.c_str(), 1, false, wbuf)) {
+    // 7-arg connect: id + user + pass + LWT (topic, qos, retain, payload)
+    if (mqtt.connect(gUid.c_str(), MQTT_USER, MQTT_PASS,
+                     willTopic.c_str(), 1, false, wbuf)) {
         (void)wn;
         gMqttUp = true;
         mqtt.subscribe("loiter/hall/msg/#", 1);   // QoS 1：broker 重启瞬间不丢消息

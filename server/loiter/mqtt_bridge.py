@@ -41,7 +41,10 @@ class MqttBridge:
 
     # --- 生命周期 ---
     def start(self) -> None:
-        log.info("connecting broker %s:%d", config.MQTT_HOST, config.MQTT_PORT)
+        if config.MQTT_USER:
+            self.client.username_pw_set(config.MQTT_USER, config.MQTT_PASS)
+        log.info("connecting broker %s:%d (auth=%s)",
+                 config.MQTT_HOST, config.MQTT_PORT, bool(config.MQTT_USER))
         self.client.connect(config.MQTT_HOST, config.MQTT_PORT, config.MQTT_KEEPALIVE)
         self.client.loop_start()
 
