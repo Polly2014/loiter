@@ -82,6 +82,15 @@ loiter/<room>/<topic>[/<sub>]
 - `keywords` ≤5 个、每个 ≤20 字符
 - 服务端异步处理：3-15s 后通过 `loiter/hall/avatar/<uid>` 下发结果
 
+#### `loiter/hall/emote`
+表情动作（国风特效）。
+```json
+{ "uid": "a8f3c1d2", "nick": "Polly", "emote": "ink", "ts": 1748620800000 }
+```
+- `emote` ∈ `ink`(甩墨痕) / `splash`(溅墨点) / `ripple`(涟漪墨圈) / `sword`(金色剑气) / `incense`(香炉轻烟)
+- 服务端 rate-limit：每 uid ≤1 次/3s
+- 服务端收到后广播到 WS（大屏特效）+ 回发 MQTT（Cardputer 显示文字提示）
+
 #### `loiter/hall/ir/ping`
 IR 碰一碰上报（P2）。
 ```json

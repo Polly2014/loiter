@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LOITER · 卡片机社交厅</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* === 卡牌社交厅 · 暗夜琥珀 (SoulArena-inspired) === */
+    --bg: #050510;           /* 深黑底 */
+    --bg-card: rgba(8, 10, 22, 0.88);
+    --fg: #e8ecf0;           /* 冷白文字 */
+    --fg-dim: #6a7080;       /* 暗淡文字 */
+    --fg-faint: rgba(212,168,83,0.1);
+    --accent: #d4a853;       /* 琥珀金 */
+    --pink: #b44dff;         /* 紫色 */
+    --amber: #d4a853;
+    --ch-main: #d4a853;
+    --ch-fishing: #00f0aa;
+    --ch-help: #b44dff;
+    --glow-gold: 0 0 20px rgba(212,168,83,0.35), 0 0 60px rgba(212,168,83,0.1);
+    --glow-purple: 0 0 20px rgba(180,77,255,0.35), 0 0 60px rgba(180,77,255,0.1);
+    --font-display: 'Orbitron', sans-serif;
+    --font-body: 'Noto Sans SC', 'Inter', -apple-system, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); }
+  body {
+    font-family: var(--font-body);
+    color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+  }
+  /* 网格背景（SoulArena 风格） */
+  body::before {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      repeating-linear-gradient(0deg, transparent, transparent 79px, rgba(212,168,83,0.02) 79px, rgba(212,168,83,0.02) 80px),
+      repeating-linear-gradient(90deg, transparent, transparent 79px, rgba(212,168,83,0.02) 79px, rgba(212,168,83,0.02) 80px),
+      radial-gradient(ellipse 60% 50% at 50% 40%, rgba(212,168,83,0.025) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 30% at 80% 20%, rgba(180,77,255,0.015) 0%, transparent 60%);
+  }
+
+  /* ---- 顶部状态栏 ---- */
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0; height: 48px;
+    display: flex; align-items: center; gap: 24px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--fg-faint);
+    background: rgba(5, 5, 16, 0.88);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    z-index: 10;
+    letter-spacing: 2px;
+  }
+  /* 顶部渐变光条 */
+  #topbar::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent 2%, var(--accent) 25%, #fff 50%, var(--pink) 75%, transparent 98%);
+    opacity: 0.7;
+  }
+  #topbar .brand {
+    font-family: var(--font-display); font-weight: 700; font-size: 18px;
+    color: var(--accent); letter-spacing: 0.1em;
+    text-shadow: 0 0 12px rgba(212,168,83,0.6), 0 0 40px rgba(212,168,83,0.25);
+  }
+  #topbar .brand .blink { animation: blink 1.1s steps(1) infinite; }
+  #topbar .stat { font-size: 13px; color: var(--fg-dim); }
+  #topbar .stat b { color: var(--fg); font-size: 15px; }
+  #topbar .chan { font-family: var(--font-display); font-size: 11px; padding: 3px 12px; border-radius: 12px; letter-spacing: 0.1em; font-weight: 500; text-transform: uppercase; }
+  #topbar .chan.main    { color: var(--ch-main);    border: 1.5px solid var(--ch-main); }
+  #topbar .chan.fishing { color: var(--ch-fishing); border: 1.5px solid var(--ch-fishing); }
+  #topbar .chan.help    { color: var(--ch-help);    border: 1.5px solid var(--ch-help); }
+  #topbar .chan.empty   { opacity: 0.3; }
+  #topbar .spacer { flex: 1; }
+  #conn { font-size: 12px; padding: 3px 10px; border: 1px solid var(--fg-dim); border-radius: 10px; }
+  #conn.ok { color: var(--accent); border-color: var(--accent); }
+  #conn.bad { color: var(--fg-dim); border-color: var(--fg-dim); animation: blink 0.8s steps(1) infinite; }
+
+  /* ---- 主画布 ---- */
+  #hall {
+    position: fixed; top: 48px; left: 0; right: 0; bottom: 150px; display: block;
+    background: transparent;
+    z-index: 2;
+  }
+  /* 暗色大厅背景图层 */
+  #hall-bg {
+    position: fixed; top: 48px; left: 0; right: 0; bottom: 150px;
+    z-index: 1; pointer-events: none;
+    background: url('assets/bg-hall.jpg') center center / cover no-repeat;
+    opacity: 0.3;
+    filter: saturate(0.7);
+  }
+
+  /* ---- 底部终端日志 ---- */
+  #log {
+    position: fixed; left: 0; right: 0; bottom: 0; height: 150px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--fg-faint);
+    background: rgba(5, 5, 16, 0.92);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    font-size: 13px; line-height: 1.6;
+    overflow: hidden;
+    z-index: 10;
+  }
+  #log .line { white-space: nowrap; opacity: 0.88; }
+  #log .ts { color: rgba(154,142,128,0.4); }
+  #log .nick { color: var(--accent); }
+  #log .sys { color: var(--pink); }
+  #log .you { color: var(--fg); }
+
+  /* ---- 暗角 + 扫描线 ---- */
+  #crt {
+    position: fixed; inset: 0; pointer-events: none; z-index: 50;
+    background:
+      repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(212,168,83,0.008) 2px, rgba(212,168,83,0.008) 4px),
+      radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(5,5,16,0.5) 100%);
+    mix-blend-mode: screen;
+  }
+
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---- 空厅提示 ---- */
+  #empty {
+    position: fixed; inset: 48px 0 150px 0;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 12px;
+    color: var(--fg-dim); z-index: 5;
+    text-align: center; letter-spacing: 1px;
+    transition: opacity 0.4s;
+  }
+  #empty .big { font-size: 26px; color: var(--accent); }
+  #empty.hidden { opacity: 0; pointer-events: none; }
+
+  /* ---- 成就 toast ---- */
+  #ach {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.8);
+    z-index: 60; pointer-events: none;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    padding: 28px 44px;
+    background: var(--bg-card);
+    border: 1px solid rgba(212,168,83,0.2);
+    border-radius: 8px;
+    box-shadow: var(--glow-gold);
+    opacity: 0; transition: opacity 0.3s, transform 0.3s;
+    text-align: center;
+  }
+  #ach.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  #ach .emoji { font-size: 56px; line-height: 1; }
+  #ach .label { font-size: 12px; letter-spacing: 4px; color: var(--amber); }
+  #ach .title { font-size: 26px; color: var(--accent); }
+  #ach .who   { font-size: 13px; color: var(--fg-dim); }
+  #ach .desc  { font-size: 13px; color: var(--fg-dim); }
+
+  /* ---- 破冰任务卷轴 ---- */
+  #task-scroll {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.8);
+    z-index: 55; pointer-events: none;
+    width: 300px; padding: 24px 32px;
+    background: var(--bg-card);
+    border: 1px solid rgba(212,168,83,0.2);
+    border-radius: 8px;
+    box-shadow: var(--glow-gold);
+    opacity: 0; transition: opacity 0.4s, transform 0.4s;
+    text-align: center;
+  }
+  #task-scroll.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  #task-scroll.burn {
+    opacity: 0; transform: translate(-50%, -50%) scale(1.1);
+    filter: brightness(1.5) sepia(0.8);
+    transition: opacity 0.6s, transform 0.6s, filter 0.6s;
+  }
+  #task-scroll .scroll-top, #task-scroll .scroll-bot {
+    font-size: 11px; letter-spacing: 6px; color: var(--amber); opacity: 0.5;
+  }
+  #task-scroll .task-who { font-size: 13px; color: var(--fg-dim); margin: 6px 0 2px; }
+  #task-scroll .task-title { font-size: 22px; color: var(--accent); margin: 4px 0; }
+  #task-scroll .task-desc { font-size: 14px; color: var(--fg-dim); }
+  #task-scroll .task-done { font-size: 28px; color: var(--accent); margin-top: 8px; display: none; }
+  #task-scroll.complete .task-done { display: block; }
+</style>
+</head>
+<body>
+  <div id="topbar">
+    <span class="brand">▌LOITER<span class="blink">_</span></span>
+    <span class="stat">ROOM <b id="room">hall</b></span>
+    <span class="stat">在线 <b id="count">0</b></span>
+    <span class="stat">消息 <b id="msgs">0</b></span>
+    <span class="chan main empty"    id="ch-main">#MAIN 0</span>
+    <span class="chan fishing empty" id="ch-fishing">#FISHING 0</span>
+    <span class="chan help empty"    id="ch-help">#HELP 0</span>
+    <span class="spacer"></span>
+    <span id="conn" class="bad">CONNECTING…</span>
+  </div>
+
+  <canvas id="hall"></canvas>
+  <div id="hall-bg"></div>
+
+  <div id="empty">
+    <div class="big">▖▘ 空空如也 ▝▗</div>
+    <div>等待第一台 Cardputer 接入…</div>
+  </div>
+
+  <div id="log"></div>
+  <div id="crt"></div>
+
+  <div id="ach">
+    <div class="emoji"></div>
+    <div class="label">ACHIEVEMENT UNLOCKED</div>
+    <div class="title"></div>
+    <div class="who"></div>
+    <div class="desc"></div>
+  </div>
+
+  <div id="task-scroll">
+    <div class="scroll-top">━━━ 卷 轴 ━━━</div>
+    <div class="task-who"></div>
+    <div class="task-title"></div>
+    <div class="task-desc"></div>
+    <div class="task-done">✅ 完成</div>
+    <div class="scroll-bot">━━━━━━━━━━━</div>
+  </div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ===================== 工具 =====================
+  const $ = (id) => document.getElementById(id);
+  const canvas = $("hall");
+  const ctx = canvas.getContext("2d");
+
+  function hashStr(s) {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+    return h >>> 0;
+  }
+  function mulberry32(seed) {
+    return function () {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // 从 uid 生成确定性的 5x5 对称像素头像 + 主色
+  function makeAvatar(uid) {
+    const seed = hashStr(uid);
+    const rnd = mulberry32(seed);
+    const hue = Math.floor(rnd() * 360);
+    const color = `hsl(${hue}, 85%, 62%)`;
+    const glow = `hsl(${hue}, 90%, 70%)`;
+    const grid = [];
+    for (let y = 0; y < 5; y++) {
+      const row = [0, 0, 0, 0, 0];
+      for (let x = 0; x < 3; x++) {
+        const on = rnd() > 0.5 ? 1 : 0;
+        row[x] = on;
+        row[4 - x] = on; // 左右镜像
+      }
+      grid.push(row);
+    }
+    return { grid, color, glow, hue };
+  }
+
+  function drawAvatar(av, cx, cy, cell, alpha) {
+    const size = 5 * cell;
+    const ox = cx - size / 2;
+    const oy = cy - size / 2;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = av.glow;
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = av.color;
+    for (let y = 0; y < 5; y++) {
+      for (let x = 0; x < 5; x++) {
+        if (av.grid[y][x]) ctx.fillRect(ox + x * cell, oy + y * cell, cell - 1, cell - 1);
+      }
+    }
+    ctx.restore();
+  }
+
+  // AI 头像：把下发的 PNG 画成圆角方块 + 发光边
+  function drawImageAvatar(n, cx, cy, cell, alpha) {
+    const size = 5 * cell;
+    const ox = cx - size / 2;
+    const oy = cy - size / 2;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = n.av.glow;
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    roundRect(ox, oy, size, size, Math.max(3, cell));
+    ctx.clip();
+    ctx.drawImage(n.img, ox, oy, size, size);
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = n.av.color;
+    ctx.lineWidth = 1.5;
+    roundRect(ox, oy, size, size, Math.max(3, cell));
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 稀有度边框：铜→银→金→SSR 彩虹（按 msg_count 推算）
+  const RARITY = [
+    { min: 0,  color: "#7a6844", glow: "rgba(122,104,68,0.3)",  width: 1.5 },  // 铜
+    { min: 5,  color: "#b0b0b0", glow: "rgba(176,176,176,0.4)", width: 2 },    // 银
+    { min: 15, color: "#d4a853", glow: "rgba(212,168,83,0.5)",  width: 2.5 },  // 金
+    { min: 30, color: null,      glow: null,                     width: 3 },    // SSR 彩虹
+  ];
+  function getRarity(msgCount) {
+    for (let i = RARITY.length - 1; i >= 0; i--) {
+      if (msgCount >= RARITY[i].min) return { ...RARITY[i], tier: i };
+    }
+    return { ...RARITY[0], tier: 0 };
+  }
+  function drawRarityRing(n, cx, cy, cell, alpha, t) {
+    const r = getRarity(n.msgCount || 0);
+    const size = 5 * cell;
+    const pad = 5;
+    const ox = cx - size / 2 - pad;
+    const oy = cy - size / 2 - pad;
+    const w = size + pad * 2;
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.9;
+    if (r.tier < 3) {
+      // 铜/银/金：纯色 + 发光
+      ctx.strokeStyle = r.color;
+      ctx.shadowColor = r.glow;
+      ctx.shadowBlur = r.tier >= 2 ? 16 : 8;
+      ctx.lineWidth = r.width;
+      roundRect(ox, oy, w, w, Math.max(8, cell + 4));
+      ctx.stroke();
+    } else {
+      // SSR 彩虹流光
+      const hue = (t * 0.05) % 360;
+      ctx.strokeStyle = `hsl(${hue}, 80%, 65%)`;
+      ctx.shadowColor = `hsla(${hue}, 90%, 70%, 0.7)`;
+      ctx.shadowBlur = 20;
+      ctx.lineWidth = r.width;
+      roundRect(ox, oy, w, w, Math.max(8, cell + 4));
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ===================== 频道色（卡牌暗色主题） =====================
+  const CHANNELS = ["main", "fishing", "help"];
+  const CHANNEL_COLORS = {
+    main:    { stroke: "#d4a853", glow: "rgba(212,168,83,0.3)",  fill: "rgba(8,10,22,0.88)" },
+    fishing: { stroke: "#00f0aa", glow: "rgba(0,240,170,0.3)", fill: "rgba(8,10,22,0.88)" },
+    help:    { stroke: "#b44dff", glow: "rgba(180,77,255,0.3)", fill: "rgba(8,10,22,0.88)" },
+  };
+  const chanColor = (ch) => CHANNEL_COLORS[ch] || CHANNEL_COLORS.main;
+
+  // ===================== 状态 =====================
+  const members = new Map(); // uid -> node
+  let totalMessages = 0;
+  let W = 0, H = 0;
+
+  // ===================== NPC 百晓生（固定在亭子附近）=====================
+  const NPC_UID = "npc-baixiaosheng";
+  const NPC_NICK = "百晓生";
+  let npcBubble = null; // {text, until, type:"ask"|"reply", nick}
+  let npcImg = null; // 预载 AI 头像
+  function npcX() { return W * 0.82; } // 亭子右侧区域
+  function npcY() { return H * 0.45; }
+
+  function drawNpc(t) {
+    const cx = npcX(), cy = npcY();
+    const bob = Math.sin(t * 0.001) * 4;
+
+    if (npcImg && npcImg.complete && npcImg.naturalWidth) {
+      // AI 预置头像
+      const size = 60;
+      const ox = cx - size / 2, oy = cy + bob - size / 2;
+      ctx.save();
+      ctx.globalAlpha = 0.9;
+      ctx.shadowColor = "rgba(201,125,255,0.3)";
+      ctx.shadowBlur = 14;
+      ctx.beginPath();
+      roundRect(ox, oy, size, size, 8);
+      ctx.clip();
+      ctx.drawImage(npcImg, ox, oy, size, size);
+      ctx.restore();
+      // 金色边框 → 紫色边框（NPC 专属）
+      ctx.save();
+      ctx.globalAlpha = 0.8;
+      ctx.strokeStyle = "#c97dff";
+      ctx.lineWidth = 1.5;
+      roundRect(ox, oy, size, size, 8);
+      ctx.stroke();
+      ctx.restore();
+      // 昵称
+      ctx.save();
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = "#9a8e80";
+      ctx.shadowColor = "rgba(201,125,255,0.2)";
+      ctx.shadowBlur = 4;
+      ctx.font = "13px 'Noto Sans SC', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(NPC_NICK, cx, cy + bob + size / 2 + 18);
+      ctx.restore();
+    } else {
+      // 印章 fallback（暗色版）
+      ctx.save();
+      ctx.globalAlpha = 0.8;
+      const hue = (t * 0.008) % 360;  // 比玩家慢 3 倍（小龙虾建议）
+      ctx.shadowColor = `hsla(${hue}, 40%, 50%, 0.3)`;
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = "rgba(35,30,42,0.85)";
+      ctx.beginPath();
+      ctx.arc(cx, cy + bob, 28, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#c97dff";
+      ctx.strokeStyle = "#c97dff";
+      ctx.lineWidth = 1.5;
+      roundRect(cx - 18, cy + bob - 18, 36, 36, 6);
+      ctx.stroke();
+      ctx.font = "bold 20px 'Noto Sans SC', sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("百", cx, cy + bob + 1);
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = "#9a8e80";
+      ctx.font = "13px 'Noto Sans SC', sans-serif";
+      ctx.fillText(NPC_NICK, cx, cy + bob + 38);
+      ctx.restore();
+    }
+    // NPC 气泡
+    if (npcBubble && performance.now() < npcBubble.until) {
+      drawNpcBubble(npcBubble, cx, cy + bob - 30);
+    } else if (npcBubble) {
+      npcBubble = null;
+    }
+  }
+
+  function drawNpcBubble(b, cx, cy) {
+    const isReply = b.type === "reply";
+    const prefix = isReply ? "" : (b.nick ? b.nick + "问：" : "");
+    const body = prefix + (b.text.length > 50 ? b.text.slice(0, 49) + "…" : b.text);
+    ctx.save();
+    ctx.font = "13px 'Noto Sans SC', sans-serif";
+    const w = Math.min(ctx.measureText(body).width + 24, 320);
+    const h = 28;
+    const x = cx - w / 2, y = cy - h;
+    ctx.globalAlpha = 0.92;
+    ctx.fillStyle = "rgba(8,10,22,0.92)";
+    ctx.strokeStyle = isReply ? "#b44dff" : "#d4a853";
+    ctx.shadowColor = isReply ? "rgba(180,77,255,0.3)" : "rgba(212,168,83,0.3)";
+    ctx.shadowBlur = 8;
+    ctx.lineWidth = 1;
+    roundRect(x, y, w, h, 8);
+    ctx.fill(); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.moveTo(cx - 4, y + h);
+    ctx.lineTo(cx + 4, y + h);
+    ctx.lineTo(cx, y + h + 5);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(8,10,22,0.92)";
+    ctx.fill();
+    ctx.fillStyle = isReply ? "#b44dff" : "#d4a853";
+    ctx.textAlign = "center";
+    ctx.fillText(body, cx, y + 18);
+    ctx.restore();
+  }
+
+  // ===================== 水墨雾气粒子 =====================
+  const petals = [];
+  const MIST_COLORS = ["rgba(212,168,83,0.1)", "rgba(180,77,255,0.07)", "rgba(0,240,170,0.06)", "rgba(232,236,240,0.04)"];
+  function spawnPetals(cx, cy, count) {
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const spd = 0.2 + Math.random() * 0.5;
+      petals.push({
+        x: cx, y: cy,
+        vx: Math.cos(a) * spd, vy: Math.sin(a) * spd - 0.3,
+        rot: 0, rotSpd: 0,
+        size: 8 + Math.random() * 16,
+        color: MIST_COLORS[Math.floor(Math.random() * MIST_COLORS.length)],
+        life: 1, decay: 0.004 + Math.random() * 0.004,
+      });
+    }
+  }
+  function drawPetals() {
+    for (let i = petals.length - 1; i >= 0; i--) {
+      const p = petals[i];
+      p.x += p.vx; p.y += p.vy; p.vy -= 0.003;
+      p.vx *= 0.998;
+      p.life -= p.decay;
+      if (p.life <= 0) { petals.splice(i, 1); continue; }
+      ctx.save();
+      ctx.globalAlpha = p.life * 0.6;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // ===================== 表情特效系统（国风水墨） =====================
+  const emoteEffects = []; // {type, x, y, born, particles:[], ...}
+
+  // 5 种表情：ink(甩墨痕) splash(溅墨点) ripple(涟漪墨圈) sword(金色剑气) incense(香炉轻烟)
+  function spawnEmote(uid, emoteType) {
+    const n = members.get(uid);
+    if (!n) return;
+    const wx = n.x + Math.cos(n.phase) * n.drift;
+    const wy = n.y + Math.sin(n.phase * 1.3) * n.drift;
+    const e = { type: emoteType, x: wx, y: wy, born: performance.now(), particles: [] };
+
+    switch (emoteType) {
+      case "ink": // 甩墨痕：从人物甩出一道弧线墨迹
+        for (let i = 0; i < 20; i++) {
+          const angle = -Math.PI / 4 + (Math.random() - 0.5) * 0.8;
+          const spd = 3 + Math.random() * 5;
+          e.particles.push({
+            x: wx, y: wy, vx: Math.cos(angle) * spd, vy: Math.sin(angle) * spd,
+            size: 3 + Math.random() * 8, life: 1, decay: 0.008 + Math.random() * 0.005,
+            color: Math.random() > 0.3 ? "rgba(42,36,32,0.7)" : "rgba(107,94,82,0.5)",
+            trail: [],
+          });
+        }
+        break;
+      case "splash": // 溅墨点：向四周溅射的圆点
+        for (let i = 0; i < 30; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const spd = 1 + Math.random() * 4;
+          e.particles.push({
+            x: wx, y: wy, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd,
+            size: 2 + Math.random() * 6, life: 1, decay: 0.01 + Math.random() * 0.008,
+            color: `rgba(42,36,32,${0.4 + Math.random() * 0.4})`,
+          });
+        }
+        break;
+      case "ripple": // 涟漪墨圈：同心圆波纹扩散
+        for (let i = 0; i < 4; i++) {
+          e.particles.push({
+            x: wx, y: wy, radius: 0, maxRadius: 50 + i * 30,
+            life: 1, decay: 0.008, delay: i * 12,
+            color: "rgba(42,36,32,0.5)",
+          });
+        }
+        break;
+      case "sword": // 金色剑气：向右上方一道金色弧光
+        for (let i = 0; i < 15; i++) {
+          const angle = -Math.PI / 3 + (Math.random() - 0.5) * 0.3;
+          const spd = 5 + Math.random() * 6;
+          const hue = 40 + Math.random() * 15; // 金色
+          e.particles.push({
+            x: wx, y: wy, vx: Math.cos(angle) * spd, vy: Math.sin(angle) * spd,
+            size: 2 + Math.random() * 3, life: 1, decay: 0.012 + Math.random() * 0.006,
+            color: `hsla(${hue}, 90%, 60%, 0.8)`,
+            glow: `hsla(${hue}, 95%, 70%, 0.6)`,
+            trail: [],
+          });
+        }
+        // 中心闪光
+        e.flash = { x: wx, y: wy, life: 1, size: 40 };
+        break;
+      case "incense": // 香炉轻烟：缓慢上升的半透明烟雾
+        for (let i = 0; i < 12; i++) {
+          e.particles.push({
+            x: wx + (Math.random() - 0.5) * 10,
+            y: wy,
+            vx: (Math.random() - 0.5) * 0.3,
+            vy: -0.5 - Math.random() * 0.8,
+            size: 6 + Math.random() * 12,
+            life: 1, decay: 0.003 + Math.random() * 0.002,
+            delay: i * 6,
+            color: "rgba(107,94,82,0.25)",
+            wobble: Math.random() * Math.PI * 2,
+          });
+        }
+        break;
+    }
+    emoteEffects.push(e);
+  }
+
+  function drawEmoteEffects(t) {
+    const now = performance.now();
+    for (let ei = emoteEffects.length - 1; ei >= 0; ei--) {
+      const e = emoteEffects[ei];
+      const age = now - e.born;
+      let alive = false;
+
+      switch (e.type) {
+        case "ink":
+        case "splash":
+          for (let i = e.particles.length - 1; i >= 0; i--) {
+            const p = e.particles[i];
+            p.x += p.vx; p.y += p.vy;
+            p.vy += 0.08; // 重力
+            p.vx *= 0.97;
+            p.life -= p.decay;
+            if (p.life <= 0) { e.particles.splice(i, 1); continue; }
+            alive = true;
+            ctx.save();
+            ctx.globalAlpha = p.life * 0.8;
+            ctx.fillStyle = p.color;
+            if (p.trail) {
+              // 墨痕拖尾
+              p.trail.push({ x: p.x, y: p.y });
+              if (p.trail.length > 8) p.trail.shift();
+              ctx.beginPath();
+              ctx.moveTo(p.trail[0].x, p.trail[0].y);
+              for (const pt of p.trail) ctx.lineTo(pt.x, pt.y);
+              ctx.lineWidth = p.size * p.life;
+              ctx.strokeStyle = p.color;
+              ctx.lineCap = "round";
+              ctx.stroke();
+            }
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+          break;
+
+        case "ripple":
+          for (let i = e.particles.length - 1; i >= 0; i--) {
+            const p = e.particles[i];
+            if (age < p.delay * 16) { alive = true; continue; }
+            p.radius += 1.5;
+            p.life -= p.decay;
+            if (p.life <= 0 || p.radius > p.maxRadius) { e.particles.splice(i, 1); continue; }
+            alive = true;
+            ctx.save();
+            ctx.globalAlpha = p.life * 0.5;
+            ctx.strokeStyle = p.color;
+            ctx.lineWidth = 2 * p.life;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+          }
+          break;
+
+        case "sword":
+          // 中心闪光
+          if (e.flash && e.flash.life > 0) {
+            alive = true;
+            e.flash.life -= 0.04;
+            ctx.save();
+            ctx.globalAlpha = e.flash.life * 0.6;
+            const g = ctx.createRadialGradient(e.flash.x, e.flash.y, 0, e.flash.x, e.flash.y, e.flash.size * e.flash.life);
+            g.addColorStop(0, "rgba(255,215,0,0.8)");
+            g.addColorStop(1, "rgba(255,215,0,0)");
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(e.flash.x, e.flash.y, e.flash.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+          for (let i = e.particles.length - 1; i >= 0; i--) {
+            const p = e.particles[i];
+            p.x += p.vx; p.y += p.vy;
+            p.vx *= 0.98;
+            p.vy *= 0.98;
+            p.life -= p.decay;
+            if (p.life <= 0) { e.particles.splice(i, 1); continue; }
+            alive = true;
+            // 拖尾
+            if (p.trail) {
+              p.trail.push({ x: p.x, y: p.y });
+              if (p.trail.length > 6) p.trail.shift();
+            }
+            ctx.save();
+            ctx.globalAlpha = p.life;
+            ctx.shadowColor = p.glow;
+            ctx.shadowBlur = 10;
+            ctx.fillStyle = p.color;
+            if (p.trail && p.trail.length > 1) {
+              ctx.beginPath();
+              ctx.moveTo(p.trail[0].x, p.trail[0].y);
+              for (const pt of p.trail) ctx.lineTo(pt.x, pt.y);
+              ctx.lineWidth = p.size * p.life;
+              ctx.strokeStyle = p.color;
+              ctx.lineCap = "round";
+              ctx.stroke();
+            }
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+          break;
+
+        case "incense":
+          for (let i = e.particles.length - 1; i >= 0; i--) {
+            const p = e.particles[i];
+            if (age < (p.delay || 0) * 16) { alive = true; continue; }
+            p.x += p.vx + Math.sin((p.wobble || 0) + age * 0.003) * 0.3;
+            p.y += p.vy;
+            p.size += 0.15; // 烟雾扩散
+            p.life -= p.decay;
+            if (p.life <= 0) { e.particles.splice(i, 1); continue; }
+            alive = true;
+            ctx.save();
+            ctx.globalAlpha = p.life * 0.4;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+          break;
+      }
+
+      if (!alive) emoteEffects.splice(ei, 1);
+    }
+  }
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    W = window.innerWidth;
+    H = window.innerHeight - 48 - 150;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + "px";
+    canvas.style.height = H + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener("resize", resize);
+
+  function spawnNode(uid, nick) {
+    const seed = hashStr(uid);
+    const rnd = mulberry32(seed ^ 0x9e3779b9);
+    const node = {
+      uid, nick: nick || uid.slice(0, 6),
+      av: makeAvatar(uid),
+      x: 80 + rnd() * Math.max(1, W - 160),
+      y: 80 + rnd() * Math.max(1, H - 160),
+      phase: rnd() * Math.PI * 2,
+      speed: 0.15 + rnd() * 0.25,
+      drift: 18 + rnd() * 22,
+      born: performance.now(),
+      leaving: 0,
+      bubble: null, // {text, until, channel}
+      pop: 0,
+      channel: "main", // 当前所在频道；msg 时更新；通过 ring/昵称/气泡色体现
+      msgCount: 0, // 稀有度判定依据
+    };
+    members.set(uid, node);
+    return node;
+  }
+
+  // ===================== 渲染循环 =====================
+  function frame(t) {
+    ctx.clearRect(0, 0, W, H);
+
+    // 背景微光粒子（缓慢漂浮的金色光点）
+    drawBgParticles(t);
+
+    const now = performance.now();
+    for (const [uid, n] of members) {
+      let alpha = 1;
+      if (n.leaving) {
+        const k = (now - n.leaving) / 600;
+        if (k >= 1) { members.delete(uid); continue; }
+        alpha = 1 - k;
+      }
+      // 入场：从底部升起
+      const age = now - n.born;
+      let scale = 1;
+      let entryY = 0;
+      if (age < 500) {
+        const k = age / 500;
+        scale = 0.5 + 0.5 * easeOutBack(k);
+        entryY = (1 - k) * 40; // 从下方 40px 升起
+      }
+      if (n.pop > 0) {
+        scale *= 1 + 0.15 * n.pop;
+        n.pop = Math.max(0, n.pop - 0.04);
+      }
+      const bobY = Math.sin(t * 0.0015 + n.phase * 2) * 3;
+      const wx = n.x + Math.cos(t * 0.0004 * n.speed + n.phase) * n.drift;
+      const wy = n.y + Math.sin(t * 0.0005 * n.speed + n.phase * 1.3) * n.drift + bobY + entryY;
+
+      // === 绘制卡牌 ===
+      drawCard(n, wx, wy, scale, alpha, t);
+
+      // 聊天气泡
+      if (n.bubble && now < n.bubble.until) {
+        drawBubble(n.bubble.text, wx, wy - 50 * scale, alpha, n.bubble.channel || n.channel);
+      } else if (n.bubble) {
+        n.bubble = null;
+      }
+    }
+
+    drawPetals();
+    drawEmoteEffects(t);
+    drawNpc(t);
+    requestAnimationFrame(frame);
+  }
+
+  // 卡牌绘制：迷你卡面（~64×80）+ 头像 + 边框 + 昵称条 + 频道荧光条
+  function drawCard(n, cx, cy, scale, alpha, t) {
+    const cardW = 64 * scale, cardH = 80 * scale;
+    const ox = cx - cardW / 2, oy = cy - cardH / 2;
+    const r = getRarity(n.msgCount || 0);
+    const cc = chanColor(n.channel);
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    // 卡面底色
+    ctx.fillStyle = "rgba(8,10,22,0.92)";
+    ctx.shadowColor = cc.glow;
+    ctx.shadowBlur = 12;
+    roundRect(ox, oy, cardW, cardH, 6 * scale);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // 稀有度边框
+    if (r.tier < 3) {
+      ctx.strokeStyle = r.color;
+      ctx.shadowColor = r.glow;
+      ctx.shadowBlur = r.tier >= 2 ? 16 : 6;
+      ctx.lineWidth = r.width * scale;
+    } else {
+      const hue = (t * 0.06) % 360;
+      ctx.strokeStyle = `hsl(${hue}, 70%, 60%)`;
+      ctx.shadowColor = `hsla(${hue}, 80%, 65%, 0.6)`;
+      ctx.shadowBlur = 20;
+      ctx.lineWidth = r.width * scale;
+    }
+    roundRect(ox, oy, cardW, cardH, 6 * scale);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // 头像区域（卡面上半部分）
+    const avatarSize = 44 * scale;
+    const avX = cx - avatarSize / 2, avY = oy + 4 * scale;
+    ctx.beginPath();
+    roundRect(avX, avY, avatarSize, avatarSize, 4 * scale);
+    ctx.clip();
+    if (n.img && n.img.complete && n.img.naturalWidth) {
+      ctx.drawImage(n.img, avX, avY, avatarSize, avatarSize);
+    } else {
+      // identicon fallback
+      drawAvatar(n.av, cx, avY + avatarSize / 2, avatarSize / 5 / scale, alpha);
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    // 昵称条（卡面底部）
+    ctx.fillStyle = "#e8ecf0";
+    ctx.font = `${Math.max(10, 12 * scale)}px "Noto Sans SC", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.fillText(n.nick, cx, oy + cardH - 8 * scale);
+
+    // 频道荧光条（底部 2px 彩色线）
+    ctx.fillStyle = cc.stroke;
+    ctx.shadowColor = cc.glow;
+    ctx.shadowBlur = 6;
+    const barW = cardW * 0.6;
+    ctx.fillRect(cx - barW / 2, oy + cardH - 3 * scale, barW, 2 * scale);
+
+    ctx.restore();
+  }
+
+  // 背景微光粒子（无光带，纯粒子）
+  const bgDots = [];
+  for (let i = 0; i < 60; i++) {
+    bgDots.push({
+      x: Math.random(), y: Math.random(),
+      size: 0.8 + Math.random() * 2.2,
+      speed: 0.00008 + Math.random() * 0.00025,
+      phase: Math.random() * Math.PI * 2,
+      alpha: 0.1 + Math.random() * 0.3,
+      hue: Math.random() > 0.7 ? 280 : (Math.random() > 0.5 ? 160 : 38),
+    });
+  }
+  function drawBgParticles(t) {
+    for (const d of bgDots) {
+      const px = d.x * W + Math.sin(t * d.speed + d.phase) * 30;
+      const py = d.y * H + Math.cos(t * d.speed * 0.7 + d.phase) * 20;
+      const a = d.alpha * (0.5 + 0.5 * Math.sin(t * 0.0008 + d.phase));
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.fillStyle = `hsl(${d.hue}, 70%, 65%)`;
+      ctx.shadowColor = `hsla(${d.hue}, 80%, 60%, 0.4)`;
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.arc(px, py, d.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function easeOutBack(x) {
+    const c1 = 1.70158, c3 = c1 + 1;
+    return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+  }
+
+  function drawBubble(text, cx, cy, alpha, channel) {
+    const cc = chanColor(channel);
+    const tag = (channel && channel !== "main") ? "#" + channel + " " : "";
+    const body = text.length > 36 ? text.slice(0, 35) + "…" : text;
+    const t = tag + body;
+    ctx.save();
+    ctx.font = "13px 'Noto Sans SC', sans-serif";
+    const w = ctx.measureText(t).width + 18;
+    const h = 24;
+    const x = cx - w / 2, y = cy - h;
+    ctx.globalAlpha = alpha * 0.92;
+    ctx.fillStyle = "rgba(8,10,22,0.9)";
+    ctx.strokeStyle = cc.stroke;
+    ctx.shadowColor = cc.glow;
+    ctx.shadowBlur = 6;
+    ctx.lineWidth = 1;
+    roundRect(x, y, w, h, 8);
+    ctx.fill(); ctx.stroke();
+    ctx.shadowBlur = 0;
+    // 小尾巴
+    ctx.beginPath();
+    ctx.moveTo(cx - 4, y + h);
+    ctx.lineTo(cx + 4, y + h);
+    ctx.lineTo(cx, y + h + 5);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(8,10,22,0.9)";
+    ctx.fill();
+    // 文字
+    ctx.fillStyle = "#e8ecf0";
+    ctx.textAlign = "center";
+    ctx.fillText(t, cx, y + 16);
+    ctx.restore();
+  }
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  // ===================== 终端日志 =====================
+  const logEl = $("log");
+  const MAX_LOG = 6;
+  function pushLog(html) {
+    const div = document.createElement("div");
+    div.className = "line";
+    const ts = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+    div.innerHTML = `<span class="ts">[${ts}]</span> ${html}`;
+    logEl.appendChild(div);
+    while (logEl.children.length > MAX_LOG) logEl.removeChild(logEl.firstChild);
+  }
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  // ===================== HUD =====================
+  function updateHud() {
+    $("count").textContent = members.size;
+    $("msgs").textContent = totalMessages;
+    $("empty").classList.toggle("hidden", members.size > 0);
+    // 频道分项：按各成员当前 channel 计数
+    const counts = { main: 0, fishing: 0, help: 0 };
+    for (const n of members.values()) counts[n.channel] = (counts[n.channel] || 0) + 1;
+    for (const ch of CHANNELS) {
+      const el = $("ch-" + ch);
+      if (!el) continue;
+      el.textContent = "#" + ch.toUpperCase() + " " + counts[ch];
+      el.classList.toggle("empty", counts[ch] === 0);
+    }
+  }
+
+  // ===================== 事件处理 =====================
+  function applySnapshot(d) {
+    members.clear();
+    $("room").textContent = d.room || "hall";
+    totalMessages = d.total_messages || 0;
+    (d.members || []).forEach((m) => {
+      const n = spawnNode(m.uid, m.nick);
+      n.born = performance.now() - 1000; // 已在场的不弹出
+      n.channel = m.current_channel || "main"; // 从快照恢复频道，刷新不会全变主厅绿
+      n.msgCount = m.msg_count || 0; // 从快照恢复消息数 → 稀有度边框
+      if (m.png_b64) { // 重连后从快照恢复 AI 头像，不必重新生成
+        const img = new Image();
+        img.onload = () => { n.img = img; };
+        img.src = "data:image/png;base64," + m.png_b64;
+      }
+    });
+    updateHud();
+    // 加载 NPC 预置头像
+    if (d.npc_avatar) {
+      npcImg = new Image();
+      npcImg.src = "data:image/png;base64," + d.npc_avatar;
+    }
+    pushLog(`<span class="sys">系统</span> 快照载入 · 在线 ${members.size}`);
+  }
+
+  function handleEvent(d) {
+    switch (d.type) {
+      case "snapshot":
+        applySnapshot(d);
+        break;
+      case "join": {
+        let n = members.get(d.uid);
+        if (!n) n = spawnNode(d.uid, d.nick);
+        else { n.nick = d.nick || n.nick; n.leaving = 0; }
+        // 樱花入场！
+        const wx = n.x + Math.cos(n.phase) * n.drift;
+        const wy = n.y + Math.sin(n.phase * 1.3) * n.drift;
+        spawnPetals(wx, wy, 18);
+        updateHud();
+        pushLog(`<span class="nick">${esc(d.nick || d.uid)}</span> entered the room`);
+        break;
+      }
+      case "leave": {
+        const n = members.get(d.uid);
+        if (n) n.leaving = performance.now();
+        pushLog(`<span class="nick">${esc(d.nick || d.uid)}</span> 离开了 ←`);
+        // 延迟刷新计数（等淡出）
+        setTimeout(updateHud, 650);
+        break;
+      }
+      case "msg": {
+        // 过滤 NPC 回复（已通过 npc_reply 事件独立处理）
+        if (d.uid === NPC_UID) break;
+        totalMessages++;
+        const n = members.get(d.uid);
+        const ch = d.channel || "main";
+        if (n) {
+          n.channel = ch; // 发消息 = 你当前在那个频道
+          n.bubble = { text: d.text, until: performance.now() + 5000, channel: ch };
+          n.pop = 1;
+          n.msgCount = (n.msgCount || 0) + 1; // 稀有度递增
+        }
+        const chTag = ch !== "main" ? `<span class="sys">#${esc(ch)}</span> ` : "";
+        pushLog(`${chTag}<span class="nick">${esc(d.nick)}</span>: ${esc(d.text)}`);
+        updateHud();
+        break;
+      }
+      case "status":
+        // 心跳：仅用于校准计数（以快照/join/leave 为准，这里不强改）
+        break;
+      case "achievement": {
+        const n = members.get(d.uid);
+        if (n) n.pop = 1;
+        pushLog(`<span class="sys">★ 成就</span> <span class="nick">${esc(d.nick || d.uid)}</span> 解锁「${esc(d.title)}」`);
+        showAchievement(d);
+        break;
+      }
+      case "avatar": {
+        const n = members.get(d.uid);
+        if (n && d.png_b64) {
+          const img = new Image();
+          img.onload = () => { n.img = img; n.pop = 1; };
+          img.src = "data:image/png;base64," + d.png_b64;
+          pushLog(`<span class="sys">◈ 头像</span> <span class="nick">${esc(d.nick || d.uid)}</span> 点亮了新脸`);
+        }
+        break;
+      }
+      case "emote": {
+        const EMOTE_LABELS = {
+          ink: "甩墨痕", splash: "溅墨点", ripple: "涟漪墨圈",
+          sword: "金色剑气", incense: "香炉轻烟",
+        };
+        spawnEmote(d.uid, d.emote);
+        const label = EMOTE_LABELS[d.emote] || d.emote;
+        pushLog(`<span class="sys">✦</span> <span class="nick">${esc(d.nick || d.uid)}</span> ${esc(label)}`);
+        break;
+      }
+      case "npc_ask": {
+        npcBubble = { text: d.text, until: performance.now() + 6000, type: "ask", nick: d.nick };
+        pushLog(`<span class="sys">❓</span> <span class="nick">${esc(d.nick)}</span> 问仙人：${esc(d.text)}`);
+        break;
+      }
+      case "npc_reply": {
+        npcBubble = { text: d.text, until: performance.now() + 8000, type: "reply", nick: null };
+        spawnPetals(npcX(), npcY(), 12);
+        pushLog(`<span class="sys">🏮</span> <span class="nick">百晓生</span>：${esc(d.text)}`);
+        break;
+      }
+      case "task_assign": {
+        showTaskScroll(d, false);
+        pushLog(`<span class="sys">📜</span> <span class="nick">${esc(d.nick)}</span> 领取任务「${esc(d.title)}」`);
+        break;
+      }
+      case "task_complete": {
+        showTaskScroll(d, true);
+        // 完成时在该用户位置释放墨痕特效
+        spawnEmote(d.uid, "ink");
+        pushLog(`<span class="sys">🔥</span> <span class="nick">${esc(d.nick)}</span> 完成任务「${esc(d.title)}」`);
+        break;
+      }
+    }
+  }
+
+  // ===================== 破冰任务卷轴 =====================
+  let taskTimer = null;
+  function showTaskScroll(d, isComplete) {
+    const box = $("task-scroll");
+    box.querySelector(".task-who").textContent = (d.nick || d.uid) + (isComplete ? " — 任务达成" : " — 新任务");
+    box.querySelector(".task-title").textContent = d.title || "";
+    box.querySelector(".task-desc").textContent = d.desc || "";
+    box.className = isComplete ? "complete show" : "show";
+    if (taskTimer) clearTimeout(taskTimer);
+    if (isComplete) {
+      // 完成：先显示 2s，然后"燃尽"
+      taskTimer = setTimeout(() => {
+        box.className = "complete burn";
+        taskTimer = setTimeout(() => { box.className = ""; }, 700);
+      }, 2000);
+    } else {
+      // 分配：显示 4s 后淡出
+      taskTimer = setTimeout(() => { box.className = ""; }, 4000);
+    }
+  }
+
+  // ===================== 成就 toast =====================
+  let achTimer = null;
+  function showAchievement(d) {
+    const box = $("ach");
+    box.querySelector(".emoji").textContent = d.emoji || "★";
+    box.querySelector(".title").textContent = d.title || "";
+    box.querySelector(".who").textContent = (d.nick || d.uid) + " — 点亮成就";
+    box.querySelector(".desc").textContent = d.desc || "";
+    box.classList.add("show");
+    if (achTimer) clearTimeout(achTimer);
+    achTimer = setTimeout(() => box.classList.remove("show"), 3800);
+  }
+
+  // ===================== WebSocket =====================
+  const conn = $("conn");
+  let ws = null, retry = 0, retryTimer = null;
+
+  function wsURL() {
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${location.host}/ws`;
+  }
+
+  function connect() {
+    setConn("bad", "CONNECTING…");
+    ws = new WebSocket(wsURL());
+    ws.onopen = () => {
+      retry = 0;
+      setConn("ok", "CONNECTED");
+      pushLog(`<span class="sys">系统</span> 已连接 Hub`);
+    };
+    ws.onmessage = (ev) => {
+      try { handleEvent(JSON.parse(ev.data)); }
+      catch (e) { /* ignore */ }
+    };
+    ws.onclose = () => {
+      setConn("bad", "RECONNECTING…");
+      scheduleReconnect();
+    };
+    ws.onerror = () => { try { ws.close(); } catch (e) {} };
+  }
+
+  function scheduleReconnect() {
+    if (retryTimer) return;
+    const delay = Math.min(1000 * Math.pow(1.6, retry), 8000);
+    retry++;
+    retryTimer = setTimeout(() => { retryTimer = null; connect(); }, delay);
+  }
+
+  function setConn(cls, text) {
+    conn.className = cls;
+    conn.textContent = text;
+  }
+
+  // ===================== 启动 =====================
+  resize();
+  updateHud();
+  requestAnimationFrame(frame);
+  connect();
+})();
+</script>
+</body>
+</html>

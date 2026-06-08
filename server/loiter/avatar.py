@@ -42,13 +42,13 @@ class AvatarResult:
 def _build_prompt(keywords: list[str]) -> str:
     kw = ", ".join(k.strip() for k in keywords if k and k.strip()) or "a friendly robot"
     return (
-        f"Chinese ink wash painting (水墨画) style character portrait of {kw}, "
-        "single character in traditional ink brush strokes, "
-        "elegant and minimal, visible brush texture, "
-        "rice paper background (#f0ebe0), vermillion red (朱砂) accent touches, "
-        "3/4 view, full body, centered composition, "
-        "traditional Chinese painting meets modern character design, "
-        "clean edges suitable for game avatar"
+        f"Cute chibi Q版 character of {kw}, "
+        "big head small body, 2.5-head proportion, adorable and expressive, "
+        "simple clean lines, Chinese traditional costume (汉服/古风) elements, "
+        "transparent background, NO background, isolated character, "
+        "centered composition, 3/4 view, full body visible, "
+        "game avatar icon style, clean edges, high contrast, "
+        "kawaii meets Chinese fantasy aesthetic"
     )
 
 
@@ -66,6 +66,7 @@ def _call_azure(prompt: str, timeout: float = 90.0) -> bytes:
         "size": "1024x1024",
         "quality": "medium",
         "output_format": "png",
+        "background": "transparent",
     }
     resp = httpx.post(
         url,
@@ -84,18 +85,17 @@ def _to_outputs(png: bytes) -> tuple[str, str]:
 
     src = Image.open(io.BytesIO(png))
 
-    # 大屏：BIG×BIG 彩色 PNG
-    color = src.convert("RGB").resize((BIG, BIG), Image.LANCZOS)
+    # 大屏：BIG×BIG 彩色 PNG（保留 RGBA 透明通道）
+    color = src.convert("RGBA").resize((BIG, BIG), Image.LANCZOS)
     buf = io.BytesIO()
     color.save(buf, "PNG", optimize=True)
     png_b64 = base64.b64encode(buf.getvalue()).decode()
 
-    # Cardputer：灰度 → 16×16 → 反色 → Floyd–Steinberg 抖动到 1-bit
-    # 反色原因：prompt 生成“白背景 + 暗主体”，PIL "1" 默认白→bit1；
-    # 但 Cardputer 黑底屏需要“主体=亮前景”，故先 invert 让暗主体→bit1（白/亮）。
+    # Cardputer：灰度 → 16×16 → Floyd–Steinberg 抖动到 1-bit
+    # 暗背景 + 亮主体：无需反色，亮主体自然→高灰度值→bit1（Cardputer 亮前景）。
     # tobytes()：每行 ceil(16/8)=2 字节、MSB 在前，共 32 bytes。
     gray = src.convert("L").resize((SMALL, SMALL), Image.LANCZOS)
-    mono = ImageOps.invert(gray).convert("1")
+    mono = gray.convert("1")
     bitmap_b64 = base64.b64encode(mono.tobytes()).decode()  # 32 bytes
 
     return png_b64, bitmap_b64

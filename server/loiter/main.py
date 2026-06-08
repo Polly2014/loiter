@@ -14,6 +14,7 @@ from . import __version__, config
 from .mqtt_bridge import MqttBridge
 from .room import Room
 from .ws import WSManager
+from . import npc
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,6 +41,7 @@ async def lifespan(app: FastAPI):
     loop = asyncio.get_running_loop()
     bridge = MqttBridge(room, ws_manager, loop)
     bridge.start()
+    npc.NPC_AVATAR_B64 = npc._load_npc_avatar()
     task = asyncio.create_task(_status_loop(bridge))
     log.info("Loiter '%s' up — broker %s:%d, room=%s",
              config.INSTANCE_NAME, config.MQTT_HOST, config.MQTT_PORT, config.ROOM)
@@ -77,8 +79,11 @@ async def snapshot():
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
     await ws_manager.connect(ws)
-    # 新连接立即推一份全量快照
-    await ws.send_json({"type": "snapshot", **room.snapshot()})
+    # 新连接立即推一份全量快照（含 NPC 头像）
+    snap = {"type": "snapshot", **room.snapshot()}
+    if npc.NPC_AVATAR_B64:
+        snap["npc_avatar"] = npc.NPC_AVATAR_B64
+    await ws.send_json(snap)
     try:
         while True:
             try:
