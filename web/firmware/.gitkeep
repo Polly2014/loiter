@@ -1,0 +1,4 @@
+# Phase 7.6 OTA — 此目录由 scripts/publish_ota.sh 写入：
+#   loiter.bin        当前固件（canonical，URL 不变）
+#   manifest.json     {version, url, sha256, size, build_ts}
+#   archives/         loiter-<version>.bin 历史归档（可选）

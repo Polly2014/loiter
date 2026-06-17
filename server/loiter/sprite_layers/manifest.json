@@ -1,0 +1,212 @@
+{
+  "body": [
+    {
+      "name": "body_01",
+      "variants": 1
+    },
+    {
+      "name": "body_02",
+      "variants": 1
+    },
+    {
+      "name": "body_03",
+      "variants": 1
+    },
+    {
+      "name": "body_04",
+      "variants": 1
+    },
+    {
+      "name": "body_05",
+      "variants": 1
+    },
+    {
+      "name": "body_06",
+      "variants": 1
+    },
+    {
+      "name": "body_07",
+      "variants": 1
+    },
+    {
+      "name": "body_08",
+      "variants": 1
+    },
+    {
+      "name": "body_09",
+      "variants": 1
+    }
+  ],
+  "eyes": [
+    {
+      "name": "eyes_01",
+      "variants": 1
+    },
+    {
+      "name": "eyes_02",
+      "variants": 1
+    },
+    {
+      "name": "eyes_03",
+      "variants": 1
+    },
+    {
+      "name": "eyes_04",
+      "variants": 1
+    },
+    {
+      "name": "eyes_05",
+      "variants": 1
+    },
+    {
+      "name": "eyes_06",
+      "variants": 1
+    },
+    {
+      "name": "eyes_07",
+      "variants": 1
+    }
+  ],
+  "outfit": [
+    {
+      "name": "outfit_01",
+      "variants": 8
+    },
+    {
+      "name": "outfit_02",
+      "variants": 4
+    },
+    {
+      "name": "outfit_06",
+      "variants": 4
+    },
+    {
+      "name": "outfit_07",
+      "variants": 4
+    },
+    {
+      "name": "outfit_08",
+      "variants": 3
+    },
+    {
+      "name": "outfit_09",
+      "variants": 3
+    },
+    {
+      "name": "outfit_16",
+      "variants": 3
+    },
+    {
+      "name": "outfit_19",
+      "variants": 4
+    },
+    {
+      "name": "outfit_23",
+      "variants": 4
+    },
+    {
+      "name": "outfit_30",
+      "variants": 3
+    },
+    {
+      "name": "outfit_32",
+      "variants": 5
+    },
+    {
+      "name": "outfit_33",
+      "variants": 3
+    }
+  ],
+  "hair": [
+    {
+      "name": "hair_01",
+      "variants": 7
+    },
+    {
+      "name": "hair_05",
+      "variants": 7
+    },
+    {
+      "name": "hair_09",
+      "variants": 7
+    },
+    {
+      "name": "hair_11",
+      "variants": 7
+    },
+    {
+      "name": "hair_13",
+      "variants": 7
+    },
+    {
+      "name": "hair_17",
+      "variants": 7
+    },
+    {
+      "name": "hair_19",
+      "variants": 7
+    },
+    {
+      "name": "hair_21",
+      "variants": 7
+    },
+    {
+      "name": "hair_25",
+      "variants": 7
+    },
+    {
+      "name": "hair_27",
+      "variants": 6
+    },
+    {
+      "name": "hair_29",
+      "variants": 6
+    }
+  ],
+  "accessory": [
+    {
+      "name": "ladybug",
+      "variants": 1
+    },
+    {
+      "name": "bee",
+      "variants": 1
+    },
+    {
+      "name": "backpack",
+      "variants": 1
+    },
+    {
+      "name": "snapback",
+      "variants": 1
+    },
+    {
+      "name": "dino_snapback",
+      "variants": 1
+    },
+    {
+      "name": "policeman_hat",
+      "variants": 1
+    },
+    {
+      "name": "detective_hat",
+      "variants": 1
+    },
+    {
+      "name": "bolt",
+      "variants": 1
+    },
+    {
+      "name": "beanie",
+      "variants": 1
+    },
+    {
+      "name": "glasses",
+      "variants": 1
+    },
+    {
+      "name": "party_cone",
+      "variants": 1
+    }
+  ]
+}

@@ -59,3 +59,24 @@ mosquitto_pub -t 'loiter/hall/echo' -m '{"hi":"mac"}'
 - `#define MQTT_MAX_PACKET_SIZE 1024`（已写进 `platformio.ini` build_flags，L3）
 - 只用 QoS 0/1，不用 QoS 2
 - `status` topic 只收 `{count, ts}`，名单靠 join/leave 增量维护
+
+---
+
+## OTA 升级（Phase 7.6）
+
+`platformio.ini` 用 `default_8MB.csv` 给两个 app slot 各 3.3MB；版本号由 `-DLOITER_FW_VERSION=\"x.y.z\"` 编译期注入。
+
+**首次烧录** 还是 USB（`pio run -e loiter -t upload`）。烧上去后该卡片以后就能空中升级——
+活动现场任何 bug 修复，回到笔记本敲一行：
+
+```bash
+cd X-Workspace/loiter
+scripts/publish_ota.sh 0.3.0
+```
+
+会自动 pio build → scp 到 VM → 写 `/firmware/manifest.json` → POST `/firmware/broadcast` →
+所有在线 Cardputer 几秒内出现全屏进度条 → restart 后 splash 显示新 `v号`。
+
+SHA256 不匹配或下载失败会自动还原到 lobby（双 partition 保证老固件继续跑，不会变砖）。
+完整 schema 与失败模式见 [docs/mqtt-protocol.md](../docs/mqtt-protocol.md) `sys/ota` 章节。
+

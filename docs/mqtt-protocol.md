@@ -1,10 +1,12 @@
-# MQTT Protocol Specification — Loiter v1
+# MQTT / WebSocket Protocol — Loiter v2 · Islands of Color
 
-> 本文档是 **Cardputer 固件** 与 **Hub Server** 的 API 契约。
-> 任何 schema 修改必须 bump 版本号 + 同步通知 Reviewers。
+> **Cardputer 固件** ↔ **Hub Server** ↔ **大屏 Web** 的三方 API 契约。
+> 任何 schema 修改必须同步通知三位 reviewer（Polly / 小龙虾 / Codex）。
+> 旧 v1 契约（聊天厅/技能/NPC）归档在 [`mqtt-protocol-v1.md`](mqtt-protocol-v1.md)，**已弃用**。
 
-**Version**: v1 (draft, 2026-05-30)
-**Broker**: Mosquitto on Mac M1, port 1883, no TLS (local network only)
+**Protocol**: v2 (2026-06-14)
+**Broker**: Mosquitto，port 1883，密码鉴权（`allow_anonymous false`）
+**权威**: Server 是唯一房间状态权威；固件/大屏不信任彼此，只信 Server。
 
 ---
 
@@ -14,224 +16,139 @@
 ```
 loiter/<room>/<topic>[/<sub>]
 ```
-- v1 阶段 `<room>` 固定为 `hall`
-- 未来扩展多房间（如 `loiter/cafe`、`loiter/secret`）时升 v2
-
-### Payload 格式
-所有 payload 均为 **UTF-8 JSON**。
+- `<room>` 固定 `hall`（Server `config.topic(*parts)` 统一构造）
+- Payload 一律 **UTF-8 JSON**
 
 ### 共用字段
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `uid` | string (8 char) | 设备唯一 ID，固件首次启动生成 + 存 NVS |
-| `nick` | string (≤16 char ASCII) | 显示昵称 |
-| `ts` | uint64 | Unix epoch milliseconds (UTC) |
-| `channel` | enum | `main` / `fishing` / `help` |
+| `uid` | string | 设备唯一 ID = `card-<chipid>`，固件首启生成存 NVS |
+| `nick` | string (≤12 ASCII) | 显示昵称 |
+| `ts` | uint64 | Unix epoch ms (UTC) |
+| `island` | int 0-5 | 岛屿索引（EMBER0/HEARTH1/SPARK2/GROVE3/TIDE4/MIST5） |
+| `color` | string `#RRGGBB` | 岛屿色 |
 
-### QoS 规则
-
-| 用途 | QoS | 备注 |
-|------|-----|------|
-| 聊天消息 (msg/whisper) | 1 | at-least-once，避免丢消息 |
-| 状态广播 (status) | 0 | lossy OK，5s 一次 |
-| 头像下发 (avatar) | 1 + retain | 后到的客户端立即拿到 |
-| 成就推送 (achievement) | 1 | 重要 toast |
-| OTA (sys/ota) | 1 + retain | 关键升级 |
-| IR 碰一碰 (ir/ping) | 0 | 高频，丢一两个无所谓 |
-
----
-
-## Topics（按方向分类）
-
-### Client → Server（Cardputer 发布）
-
-#### `loiter/hall/join`
-设备上线声明。
-```json
-{ "uid": "a8f3c1d2", "nick": "Polly", "ts": 1748620800000, "fw_ver": "0.1.0" }
-```
-
-#### `loiter/hall/leave`
-主动下线 **或 LWT 自动触发**。
-```json
-{ "uid": "a8f3c1d2", "ts": 1748620800000, "reason": "graceful" | "lwt" }
-```
-
-#### `loiter/hall/msg/<channel>`
-频道消息。`<channel>` ∈ `{main, fishing, help}`
-```json
-{ "uid": "a8f3c1d2", "nick": "Polly", "text": "hello world", "ts": 1748620800000 }
-```
-- `text` 限长 200 字符
-- 服务端做 rate-limit：每用户每秒 ≤2 条
-
-#### `loiter/hall/whisper/<to_uid>`
-私聊。
-```json
-{ "from": "a8f3c1d2", "text": "hey", "ts": 1748620800000 }
-```
-- 服务端只 forward 给 `to_uid` 所在的 session
-- ⚠️ **Known limitation (L2)**：Mosquitto 默认无 ACL，任意客户端可订阅他人 `whisper/<uid>` topic。
-  30 人内部活动接受此风险；v2 若需隔离改服务端中转（不用 topic 直发）或上 broker ACL。
-
-#### `loiter/hall/avatar/request`
-请求 AI 生成头像。
-```json
-{ "uid": "a8f3c1d2", "keywords": ["cyberpunk", "cat", "neon"] }
-```
-- `keywords` ≤5 个、每个 ≤20 字符
-- 服务端异步处理：3-15s 后通过 `loiter/hall/avatar/<uid>` 下发结果
-
-#### `loiter/hall/emote`
-表情动作（国风特效）。
-```json
-{ "uid": "a8f3c1d2", "nick": "Polly", "emote": "ink", "ts": 1748620800000 }
-```
-- `emote` ∈ `ink`(甩墨痕) / `splash`(溅墨点) / `ripple`(涟漪墨圈) / `sword`(金色剑气) / `incense`(香炉轻烟)
-- 服务端 rate-limit：每 uid ≤1 次/3s
-- 服务端收到后广播到 WS（大屏特效）+ 回发 MQTT（Cardputer 显示文字提示）
-
-#### `loiter/hall/ir/ping`
-IR 碰一碰上报（P2）。
-```json
-{ "from_uid": "a8f3c1d2", "to_uid": "b9e4d2e3", "rssi": -45, "ts": ... }
-```
+### 6 座岛屿（Server `islands/assignment.py` 权威）
+| idx | name | color |
+|-----|------|-------|
+| 0 | EMBER | `#e84d3c` |
+| 1 | HEARTH | `#ff9f43` |
+| 2 | SPARK | `#f9ca24` |
+| 3 | GROVE | `#6ab04c` |
+| 4 | TIDE | `#4a6fa5` |
+| 5 | MIST | `#5f27cd` |
 
 ---
 
-### Server → Client / Broadcast
+## MQTT Topics
 
-#### `loiter/hall/msg/<channel>` (echo)
-服务端把收到的消息广播给所有订阅了该 channel 的客户端。
-- 服务端不修改 payload，只做 rate-limit + 内容过滤
+### 传输层（沿用 v1 已验证资产）
 
-#### `loiter/hall/avatar/<uid>` (retain)
-头像 bitmap 下发。
+| Topic | Dir | QoS | Payload | 说明 |
+|-------|-----|-----|---------|------|
+| `loiter/hall/join` | C→S | 1 | `{uid, nick}` | 上线声明 |
+| `loiter/hall/profile` | C→S | 1 | `{uid,nick,avatar:{shape[5],color[5]},sig:{particle,action}}` | 形象/签名实时同步 |
+| `loiter/hall/leave` | C→S | 1 | `{uid, reason?}` | 主动下线 / LWT |
+| `loiter/hall/move` | C→S | 0 | `{uid, dx, dy}` | IMU 倾斜，dx/dy ∈ [-1,1]，服务端 250ms 限流 |
+| `loiter/hall/status` | S→all | 0 | `{count, ts}` | 在线人数心跳（5s） |
+| `loiter/hall/sys/ota` | S→all | 1+retain | `{version, url, sha256, size, targets, build_ts}` | OTA 推送 |
+| `loiter/hall/sys/notice` | S→all | 1 | `{text, level}` | 系统通告 |
+
+### 玩法层（v2 新 · Islands of Color）
+
+| Topic | Dir | QoS | Payload | 说明 |
+|-------|-----|-----|---------|------|
+| `loiter/hall/quiz/done` | C→S | 1 | `{uid, answers:[int,int,int]}` | quiz 完成 → Server 分配岛屿 |
+| `loiter/hall/island/<uid>` | S→C | 1 | `{island, name, color}` | 定向告诉设备它的岛屿 |
+| `loiter/hall/hi/request` | C→S | 1 | `{requester, responder?|responder_nick?, msg?}` | HI 发起（responder 给 uid 或 nick 二选一；msg ≤15 char 可选） |
+| `loiter/hall/hi/respond` | C→S | 1 | `{requester, responder, accept}` | responder 回应 requester |
+| `loiter/hall/hi/cancel` | C→S | 1 | `{requester}` | 发起方撤销未决 HI（server cancel pending） |
+| `loiter/hall/hi/result/<uid>` | S→C | 1 | 见下 | 定向推送 HI 进展 |
+| `loiter/hall/roster` | S→all | 1+retain | `{members:[{uid,nick,island}], ts}` | 在线名册（仅已分岛成员），设备缓存用于 `HI <nick>` 补全 |
+| `loiter/hall/jump` | C→S | 1 | `{uid}` | 集体跳，10s 窗口聚合 ≥5 人触发 |
+| `loiter/hall/anon` | C→S | 1 | `{uid, text}` | 匿名公屏（≤30 char，每人 60s 1 条） |
+| `loiter/hall/sig` | C→S | 1 | `{uid, particle, action}` | `/sig` 即时动作广播 |
+| `loiter/hall/phase` | S→all | 1+retain | `{phase: 1\|2\|3}` | host 控制全场阶段切换 |
+| `loiter/hall/reading/request` | C→S | 1 | `{uid}` | 设备进 Phase 3 按需请求"今天的你" |
+| `loiter/hall/reading/<uid>` | S→C | 1 | 见下 | Phase 3 AI 个人解读（B-lite 双语）|
+
+#### `reading/<uid>` payload（B-lite 双语）
 ```json
-{
-  "uid": "a8f3c1d2",
-  "bitmap_b64": "...",     // 32 bytes base64 → 16×16 1-bit packed
-  "width": 16,
-  "height": 16,
-  "format": "mono_msb",     // bit packing: MSB first
-  "url_hires": "https://loiter.polly.wang/avatar/a8f3c1d2.png"  // 大屏用
-}
+{ "title": "ROOTED SPARK",          // EN 身份标签（旧字段，向后兼容）
+  "title_cn": "扈根的火花",          // CN 副标题 ≤6 汉字
+  "core_cn": "你从森林走向了火光",   // CN 核心句 ≤12 汉字
+  "lines": ["l1", "l2", "l3"],       // EN 3 行短诗（旧字段）
+  "lines_cn": ["c1","c2","c3","c4","c5","c6"],  // CN 6 行短句，每行 ≤12 汉字
+  "island": 3, "color": "#6ab04c", "spectrum": [...] }
 ```
-- `retain=true`，后加入者立即拿到全员头像
-- 固件解码：每 byte = 8 像素，从 MSB 开始
+> 固件：P3-02 用 `title`/`title_cn`/`core_cn`；P3-03 三页每页 `lines[page]` + `lines_cn[page*2..+1]`。
+> **旧 `title`/`lines` 保留** → 大屏 `reading_reveal` 不改不崩（向后兼容）。设备不读 `spectrum`/`color`（色块读本地 `g_collection`）。
 
-#### `loiter/hall/achievement/<uid>`
-成就解锁。
-```json
-{
-  "uid": "a8f3c1d2",
-  "badge": "first_join",
-  "title": "First Light",
-  "desc": "你是第一个加入大厅的人",
-  "ts": 1748620800000
-}
-```
+#### HI 字段语义（钉死，防歧义 — review 小龙虾#2 / Codex）
+- **`requester`** = 发起 HI 的人（被回应的人）
+- **`responder`** = 被邀请回应的人（当前发送 respond 的人）
+- 设备可发 `responder`（uid）或 `responder_nick`（键入 `HI ALICE`），服务端权威解析 nick→uid（大小写不敏 first-match）
+- 双方必须都已分岛（`island≥0`）才受理 HI request（未分岛静默丢弃）
+- 流程：A `hi/request{requester:A, responder:B}` → Server 给 B 发 `hi/result/B {event:"incoming", requester:A}` → B `hi/respond{requester:A, responder:B, accept:true}` → 握手成立
+- **两条消息里 `requester`/`responder` 字段值始终不变**（不随发送方翻转），消除"谁是 from"的歧义
 
-#### `loiter/hall/status`
-在线人数心跳广播（每 5s）。**只发 `count`，不发全员列表**——
-在线名单的增删由 `join` / `leave` 事件维护（增量），避免 30 人时 payload 撞爆
-PubSubClient 默认 256B buffer（见「固件实现注意事项」）。
-```json
-{ "count": 7, "ts": 1748620800000 }
-```
-> 大屏（WebSocket，无 buffer 限制）若需要完整在线名单，由 Server 通过 WS 单独推全量快照，不走 MQTT。
-
-#### `loiter/hall/sys/notice`
-系统通告（横幅滚动）。
-```json
-{ "text": "AI NPC 已上线，发送 /ai <消息> 找它聊天", "level": "info" }
-```
-`level` ∈ `info` / `warn` / `error`
-
-#### `loiter/hall/sys/ota` (retain)
-OTA 推送。
-```json
-{ "version": "0.2.0", "url": "https://loiter.polly.wang/firmware-0.2.0.bin", "sha256": "..." }
-```
-- 客户端检测 `version > current` → 弹窗询问是否升级 → 调 `ESP.OTA(...)`
+#### `hi/result/<uid>` 的 event 类型
+| event | 何时 | 额外字段 |
+|-------|------|---------|
+| `incoming` | 有人 HI 你 | `requester`, `requester_nick`, `color`（发起者岛色）, `msg` |
+| `matched` | 握手成功 | `partner`（对方昵称）, `color`（对方岛色）, `slot`（换入第几格，`-1`=同岛/重复/满格的共鸣不加色） |
+| `declined` | 对方拒绝 | `partner` |
+| `expired` | pending 30s 超时 | （无） |
 
 ---
 
-## LWT (Last Will Testament)
+## WebSocket（Server → 大屏，只读单向）
 
-每个 Cardputer 在 MQTT CONNECT 时必须设置 LWT：
+连接 `/ws`，建连即收一帧 `{type:"snapshot", ...room.snapshot()}`。Server 每 20s 对空闲连接发 `{type:"ping"}`（规避 Cloudflare tunnel idle 杀连，前端忽略未知 type）。
 
-```c
-client.setWill(
-  "loiter/hall/leave",                      // topic
-  "{\"uid\":\"a8f3c1d2\",\"reason\":\"lwt\"}",  // payload
-  1,                                         // QoS
-  false                                      // retain
-);
+### snapshot 成员结构
+```json
+{ "uid","nick","joined_at","island","island_color",
+  "spectrum":["#f9ca24",null,null,null,null], "hi_count",
+  "reading": null,   // Phase 3 已生成的 reading（dict|null）→ 大屏重连不掉回 fake
+  "x","y" }
 ```
+> `island=-1` 未分配时 `island_color="#888888"`（fallback，不空转 CSS）。
+> `x/y` 是**服务端归一化坐标**（逻辑画布 1920×1080）；大屏地图 2752×1536，自行映射。
 
-broker 检测到断线（keepalive timeout，默认 60s）会自动发布 LWT，
-Server 收到 `reason=lwt` 后清理在线状态并广播 `status`。
-
----
-
-## Subscriptions（Client 侧推荐订阅清单）
-
-```
-loiter/hall/msg/main          # 默认订阅主厅
-loiter/hall/whisper/<my_uid>  # 私聊
-loiter/hall/avatar/+          # 所有头像（retain 自动 backfill）
-loiter/hall/achievement/<my_uid>  # 自己的成就
-loiter/hall/status            # 在线人列表
-loiter/hall/sys/+             # 所有系统消息
-```
-
-切换频道时：
-- unsubscribe 旧 channel 的 `loiter/hall/msg/<old>`
-- subscribe 新 channel 的 `loiter/hall/msg/<new>`
-
----
-
-## Rate Limits (Server 侧实施)
-
-| Topic | 限制 |
-|-------|------|
-| `msg/<channel>` | 每 uid ≤2 条/s, ≤30 条/min |
-| `whisper/<to>` | 每 uid ≤5 条/s |
-| `avatar/request` | 每 uid 每 5 分钟 ≤1 次 |
-| `ir/ping` | 每 uid ≤2 次/s |
-
-超限的消息**丢弃 + 不通知**（防 DoS），仅在 server log 记录。
+### 事件类型（server→大屏）
+| type | 触发 | 关键字段 |
+|------|------|---------|
+| `join` | 上线 | `uid, nick, island, island_color, count` |
+| `profile_update` | 昵称/换装/sig 更新 | `uid, nick, avatar, sig_particle, sig_action` |
+| `leave` | 下线 | `uid, count` |
+| `move` | IMU | `uid, dx, dy` |
+| `status` | 5s 心跳 | `count` |
+| `island_assign` | quiz 完成登岛 | `uid, island, island_color, spectrum` |
+| `hi_arc` | HI 握手成功（P3） | `a, b`（双方 uid）, `a_spectrum, b_spectrum`（换色后各自 5 格，大屏即时刷新）（跨海彩虹弧） |
+| `jump_burst` | ≥5 人 JUMP | `count` |
+| `anon_msg` | 匿名公屏 | `text`（已剥离身份） |
+| `sig_cast` | `/sig` 即时动作 | `uid, particle, action` |
+| `sig_copy` | 近距同时 shake 复制对方降临 sig | `a, b, a_particle, b_particle` |
+| `phase_change` | 阶段切换 | `phase` |
+| `reading_reveal` | Phase 3 个人解读生成 | `uid, nick, title, lines[3], island, color, spectrum`（大屏只用 EN `title`/`lines`；CN 字段仅设备端 MQTT payload 有） |
 
 ---
 
-## Error / Disconnect 行为
+## 规则要点（Server 权威，详见 M5_PRD / WORKSHOP_PLAN_V4）
 
-| 场景 | 客户端行为 |
-|------|----------|
-| WiFi 断 | 屏幕显示 `[OFFLINE]`，自动重连 |
-| MQTT 断（WiFi 正常） | 屏幕显示 `[RECONNECTING]`，指数退避 1/2/4/8s |
-| broker 拒绝 | 屏幕显示 `[BROKER REJECT]`，停 30s 后重试 |
-| 收到非法 JSON | 静默忽略，server log warn |
+- **5 格收集**：slot[0] = 本色（登岛即填）；其余 4 格从他人 HI 收对方岛色
+- **同岛 HI 不加色**（共鸣光环）；**重复 HI 同人不加色**；满 5 格仍可 HI（纯社交）
+- **HI** 单 pending + 30s 超时；**JUMP** 10s 窗口 ≥5 人触发 + 3s burst debounce
+- **anon** 每人每分钟最多 1 条 + 服务端剥离身份
 
 ---
 
-## 固件实现注意事项（PubSubClient）
+## 实现状态（截至 P0）
 
-| 坑 | 处理 |
+| 层 | 状态 |
 |----|------|
-| 默认单包 payload ≤256 bytes | `#define MQTT_MAX_PACKET_SIZE 1024`（编译前）或运行时 `client.setBufferSize(1024)`。avatar bitmap JSON ~200B、msg 长文本都可能超 256B |
-| 不支持 QoS 2 | 本协议只用 QoS 0/1，已规避 |
-| keepalive 默认 15s | 建议 `client.setKeepAlive(60)` 配合 LWT timeout |
-| `status` 原设计发全员列表 | 已改为只发 `count`（增量），参见 status topic |
-
----
-
-## 版本变更记录
-
-| 版本 | 日期 | 变更 |
-|------|------|------|
-| v1 (draft) | 2026-05-30 | 初稿，待 Reviewers 拍板 |
-
-> 任何字段增删都要 bump 版本，并在固件 / server 的 `config.py` / `config.h` 里
-> 显式声明 `PROTOCOL_VERSION`，握手时校验。
+| Server 传输层 | ✅ 完整 |
+| Server 玩法 handler | 🟡 骨架（quiz→island 通；HI 仅校验握手，换色待 P3；reading 待 P4） |
+| 大屏 | ⬜ P1 |
+| 固件 | ⬜ P2（当前固件仍是 v1 协议，**未对接 v2** — Codex 提示） |

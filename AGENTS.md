@@ -1,11 +1,36 @@
-# AGENTS.md — Loiter
+# CLAUDE_v1_lab.md — Loiter v1（已归档 · 工程参考）
+
+> ⚠️ **这是 v1-lab 历史归档，不是当前 source of truth。**
+> 当前目标与实施蓝图见 [`CLAUDE.md`](CLAUDE.md)（v2 · Islands of Color）。
+> 本文件仅供查 **v1 工程底座细节**：部署 runbook / OTA / MQTT 传输层 / 踩坑。v1 的玩法层（仙侠/技能融合/NPC/频道/成就/AI 头像）**已弃用**，不要照搬到 v2。
+
+---
 
 > 卡片机社交厅 · A pocket-sized social lobby for hardware hackers.
 
-**Status**: 🟢 Sprint 7 Skill Fusion 灵魂玩法上线 ✅ (2026-06-08) · 双机 shake 配对 + fingerprint + 16 技能 + 4 大招 + omni + 固件 chip 行 + KING 皇冠 · 下次开 Phase 7.6 OTA
-**Reviewers**: Polly + 小龙虾（均已批准）
-**Developer**: Codex (Copilot)
-**Scope 决策**: P0+P1+P2 全做；设备发参与者带走（账号持久化）；回放战报升 P1；**服务端全上云，本地 Mac hub 留为现场离线兜底**
+**Status**: 🟠 **Islands of Color 迁移中** (2026-06-14~) · Loiter 引擎底座 + Designer V4 产品交互 · 传输层复用 / 玩法层 v2 重建
+**Reviewers**: Polly + 小龙虾 + Codex/Claude（三方一起 Review）
+**Developer**: Polly（Coding owner / 主力实现）
+**Scope 决策**: V4 WORKSHOP_PLAN 为产品真相；旧 UI/交互直接覆盖（不保留运行时共存）；部署拓扑不变（同 VM / 同域名 / 同 systemd）
+
+> **协作模式**：Polly 负责 Coding；Polly + 小龙虾 + Codex/Claude 三方一起 Review。三方角色：
+> - **Polly**：实现 + 最终决策权 + 产品一致性 Review
+> - **小龙虾 🦞**：架构 Review + 边界测试 + 工程坑点把关
+> - **Codex/Claude**：Code Review + 设计一致性校验 + 局部补丁/验证辅助
+>
+> Review 标准：重要 PR/commit 需三方都看过再进 main；小修可由 Polly 拍板，但仍优先保留 review 记录。
+
+### 迁移决策记录 (2026-06-14)
+
+| 决策点 | 结论 | 理由 |
+|--------|------|------|
+| 仓库策略 | 原地 `loiter/` 改造 | 运维资产（OTA 脚本/tunnel/systemd/部署路径）全绑定在此，换目录等于作废 |
+| 旧 UI | 直接覆盖删除 | 不成体系，无保留价值；git history 足够回溯 |
+| 协议策略 | **传输层复用 + 玩法层 v2 重建** | 传输层（snapshot/join/leave/move/status/ping）跟玩法无关直接用；玩法层（pair_*/npc_*/quiz_*/task_*/achievement）整段删 |
+| v2 玩法 topic | `hi/request` `hi/respond` `hi/result/<uid>` `jump` `anon` `phase` `reading/<uid>` | 服务端权威 |
+| v1 保留方式 | `git tag v1-lab` 冻结 | 不做运行时 mode 共存 |
+| ESP-NOW vs WiFi+MQTT | WiFi+MQTT | 三方一致，V4 plan 锁定 |
+| Designer 资产来源 | `loiter_v2/extracted/GLEAM-workshop-projects-add-m5-cardputer-pride-workshop/` | PRD + sprite + 大屏 HTML 的设计稿来源，实施代码回到 `loiter/` |
 
 ---
 
@@ -41,7 +66,7 @@
 | Hub | **Azure VM `20.51.201.85`**（Ubuntu 20.04，与 xhsx / SoulArena / CopilotX 同机）。本地 Mac 仅作现场离线兜底 |
 | 网络 | **云端模式（当前）**：Cardputer 连任何 WiFi → 公网 1883 → VM mosquitto；大屏走 `https://loiter.polly.wang`。**现场离线兜底**：Mac 自建热点 + 本地 broker/server，改 `firmware/src/config.h` 的 `MQTT_HOST` 切回 |
 | 大屏 | `loiter.polly.wang` → Cloudflare Tunnel（跑在 VM）→ `localhost:8080`。任何手机/电视/浏览器随时可访问 |
-| AI 服务 | 图像：Azure AI Foundry gpt-image-1.5（dream-painter 同源凭据，存 VM `/etc/loiter/loiter.env` chmod 600）；文本：CopilotX Codex |
+| AI 服务 | 图像：Azure AI Foundry gpt-image-1.5（dream-painter 同源凭据，存 VM `/etc/loiter/loiter.env` chmod 600）；文本：CopilotX Claude |
 | 设备归属 | **活动后发参与者带走** → 账号持久化；带回家照样能玩，反正服务端 7×24 在线 |
 | 设备到手 | Polly 手边 1 台 Cardputer-Adv，云端真机验证通过 ✅ |
 | 时间线 | 充裕（P0+P1+P2 全做） |
@@ -131,7 +156,7 @@
 |---|------|------|
 | P2.1 | 简化版破冰任务 | 从服务器已有状态推任务卡，无需额外采集数据 |
 | ~~P2.2~~ | ~~IR "碰一碰加好友"~~ | **已替换** → Sprint 7 双机同步 shake 配对（Cardputer-Adv 只有 IR 发射器，无接收器，纯 IR 双机互通硬件不可能） |
-| P2.3 | 现场 AI NPC | 房间里有只 Codex，每人都能找它聊一句 |
+| P2.3 | 现场 AI NPC | 房间里有只 Claude，每人都能找它聊一句 |
 | ~~P2.4~~ | 已升级为 **P1.5**（见上）：Polly 决定要回放/战报 | |
 
 ### 🟫 P3 — 已砍掉（write-down rationale）
@@ -170,8 +195,8 @@
 
 ```
 X-Workspace/loiter/
-├── AGENTS.md                   ← 本文档（设计稿 + 活文档）
-├── README.md                   ← 入口（指向 AGENTS.md）
+├── CLAUDE.md                   ← 本文档（设计稿 + 活文档）
+├── README.md                   ← 入口（指向 CLAUDE.md）
 ├── .gitignore
 │
 ├── server/                     ← Hub 服务（Mac M1 上运行）
@@ -249,7 +274,7 @@ loiter/<room>/<topic>/<sub>
 | `loiter/hall/achievement/<uid>` | S→C | `{badge, title, desc}` | 成就解锁推送 |
 | `loiter/hall/status` | S→broadcast | `{count, ts}` | 在线人数心跳（每 5s，**只发 count**；名单增量靠 join/leave） |
 | `loiter/hall/sys/notice` | S→broadcast | `{text, level}` | 系统通告（如"NPC 上线了"） |
-| `loiter/hall/sys/ota` | S→broadcast | `{version, url}` | OTA 推送 |
+| `loiter/hall/sys/ota` | S→broadcast (retain) | `{version, url, sha256, size, targets, build_ts}` | OTA 推送 — Phase 7.6。完整 schema 见 `docs/mqtt-protocol.md` |
 | `loiter/hall/ir/ping` | C→S | `{from_uid, to_uid, rssi}` | ~~IR "碰一碰" 上报~~ — **废弃**，改用 `pair/shake`（见下） |
 | `loiter/hall/pair/intent` | C→S | `{uid, ts}` | Sprint 7：`/pair` 进入 3s “求偶模式” |
 | `loiter/hall/pair/shake` | C→S | `{uid, ts, peak_g}` | Sprint 7：求偶模式期间 BMI270 检测到剧烈 shake 上报 |
@@ -270,14 +295,14 @@ loiter/<room>/<topic>/<sub>
 
 | 命令 | 说明 |
 |------|------|
-| `/pair` | 进入 3s "求偶模式"：LED 状态灯变粉色 / 屏幕提示"SHAKE TOGETHER"，期间上报 shake 。未在求偶模式的 shake 仍是 emote。 |
+| `/pair` | 进入 3s “求偶模式”：LED 状态灯变粉色 / 屏幕提示“SHAKE TOGETHER”，期间上报 shake 。未在求偶模式的 shake 仍是 emote。 |
 | `/skills` | 列出自己拥有的技能 + 总收集进度 `x/16` |
 
 **Sprint 7 交互逻辑 — 服务端权威、不信任客户端：**
 - 双方都 `/pair` 后状态机进 `WAITING_SHAKE`（3s 超时）
 - 只有两个都在 `WAITING_SHAKE` 的 uid，在 **1.5s 窗口 + peak_g 都 ≥3.0g** 才算配对
 - 同一对 (A,B) **整场只能配对一次**（进 `paired_with` set）→ 逆向鼓励去碰没碰过的人
-- 服务端占有 ground truth 技能集，客户端锁友推送不可伪造
+- 服务端占有 ground truth 技能集，客户端锁友推送不可俯造
 
 ### Known Limitations（v1 已知取舍 — 小龙虾 review）
 
@@ -318,7 +343,7 @@ loiter/<room>/<topic>/<sub>
 - [x] Azure gpt-image-1.5 集成 + Pillow dither（`avatar.py`：keywords→prompt→1024 PNG→大屏 256 彩色 PNG（WS）+ Cardputer 16×16 1-bit bitmap 32B（S→`avatar/<uid>` QoS1）；`/face <keywords>` 触发；线程池避免阻塞 MQTT 线程；凭据走 env fail-closed；真机 Azure 生成端到端验证 + 真机 /face→头像 toast 渲染✅ 2026-05-31）
 - [x] 5 个成就规则 + Cardputer toast（`achievements.py` 纯内存规则引擎；首位加入/破百消息/夜猫子/社交达人/频道环游；Server→`achievement/<uid>` QoS1 下发 + WS 大屏 toast；真机 toast 渲染验证✅ 2026-05-31）
 - [x] 多频道切换 — 大屏可视化（节点头像外圈 channel ring + 昵称/气泡频道色 + 顶部 HUD `#MAIN/#FISHING/#HELP` 计数徽章；`Member.current_channel` 落 snapshot 让重连不丢色；CHANNEL_COLORS 集中管理便于 P2 redesign 换色）✅ 2026-05-31
-- [ ] OTA framework
+- [x] OTA framework — Phase 7.6 交付（见 Sprint 7·7.6）
 
 ### Sprint 2.5 — 云端部署（紧急插队）
 - [x] Azure VM 装 mosquitto + 改 `/etc/mosquitto/conf.d/loiter.conf` 监听 0.0.0.0:1883✅ 2026-05-31
@@ -336,7 +361,7 @@ loiter/<room>/<topic>/<sub>
 
 ### Sprint 3 — P2 锦上添花
 - [x] `/emote` 表情动作（5 种明亮草原特效：🌸 bloom 樱花爆发 / ✨ spark 金色烟花 / 🍃 wind 清风拂叶 / 🦊 fox 狐火旋转 / 🌈 rain 彩虹弧；全链路 firmware→server→大屏 Canvas 粒子；3s 冷却 rate-limit；摇一摇触发随机 emote（BMI270 >2.5g 检测 + `esp_random()`）；旧版暗黑水墨 emote 已替换）✅ 2026-06-01
-- [x] AI NPC Vix 狐灵（`/ask <问题>` → CopilotX Codex → 话多俏皮小狐仙风回复；gpt-image 生成 Q 版狐灵头像 `npc_vix.png`（去白底透明）；uid `npc-vix`；大屏漂浮仙灵渲染 + 觉醒态旋转光环 + 尾迹花粉粒子）✅ 2026-06-01
+- [x] AI NPC Vix 狐灵（`/ask <问题>` → CopilotX Claude → 话多俏皮小狐仙风回复；gpt-image 生成 Q 版狐灵头像 `npc_vix.png`（去白底透明）；uid `npc-vix`；大屏漂浮仙灵渲染 + 觉醒态旋转光环 + 尾迹花粉粒子）✅ 2026-06-01
 - [x] 破冰任务卡（`/task` 领取随机任务 → 12 种任务池覆盖全部功能 → 自动检测完成 → 大屏卷轴展开+燃尽动画；任务文案已改英文匹配 Cardputer 键盘）✅ 2026-05-31
 - [ ] IR 碰一碰
 - [ ] 回放页
@@ -415,12 +440,17 @@ loiter/<room>/<topic>/<sub>
 - [ ] 个人战报：你配对了 N 人 / 解锁了 M 个 / 最佳 CP 是谁（互相是对方首位 pair）
 - [ ] 全场战报：技能传播链路图（D3 force-directed）/ 收集王 / 万象归一首位
 
-#### Phase 7.6 — OTA 固件升级（下次会话开干 ⏳）
-- [ ] Server: `firmware.bin` 上传到 `/static/firmware.bin` + `/firmware/manifest.json` 返回 `{version, sha256, url, size}`
-- [ ] Firmware: 启动 / 收到 `sys/ota` 时 → HTTP GET manifest → 比 chipid 黑白名单 + 版本号 → ESP32 OTA partition 烧写 → reset
-- [ ] Server admin: `mosquitto_pub -t loiter/hall/sys/ota -m '{"version":"x.y.z","url":"https://.../firmware.bin","sha256":"...","targets":"all|<uid>"}'`
-- [ ] 安全 check：sha256 比对 + 烧写失败回滚（ESP32 双 partition 天然支持）
-- [ ] UI: Cardputer 进度条 `[████░░░░] 50%` + 完成后 reset 重连
+#### Phase 7.6 — OTA 固件升级 ✅ 2026-06-08
+- [x] **Server**：`/firmware/manifest.json` 路由 + `/firmware/loiter.bin` 静态 + `POST /firmware/broadcast` admin 触发 + `MqttBridge.publish_ota()` retain=true
+- [x] **Firmware**：`platformio.ini` 切到 `default_8MB.csv`（双 OTA slot 各 3.3MB） + `LOITER_FW_VERSION` 编译期注入 + `WiFiClientSecure.setInsecure()` 流式 HTTPClient → Update.h 写 partition
+- [x] **SHA256 强校验**：mbedtls 边写边算，hash 不匹配 → Update.abort() 不重启（双 partition 保证老固件可继续跑）
+- [x] **Targets 白名单**：`"all"` / `"card-abc,card-def"`（逗号分隔），不含自己静默跳过
+- [x] **Semver 三段对比**：避免 `"0.10.0" < "0.2.0"` 字典序陷阱
+- [x] **Pending pattern**：MQTT callback 只设标志，OTA 在 `loop()` 跳出 callback 后执行，避免阻塞 30s 触发 LWT
+- [x] **全屏 OTA UI**：进度条 `[████░░░░] 50%` + KB/KB 实时刷新 + 阶段文字 (downloading/finalizing/restarting) + 错误态自动还原
+- [x] **`publishJoin()` 带 `fw_ver`** 字段，方便服务端针对性推升级
+- [x] **发布工具** `scripts/publish_ota.sh <version> [--targets ...] [--no-broadcast]`：pio build → scp → 写 manifest → POST 广播
+- [ ] 真机端到端验证（需要先用 USB 烧 0.2.0，再用脚本发 0.3.0 OTA → 看到进度条 → 重启后 v 号变 0.3.0）
 
 ### Day-of
 - [ ] 提前 1h 到场 → 部署 + 烟雾测试
@@ -532,6 +562,23 @@ pio run -e loiter -t upload                    # 编译 + 烧录
 pio device monitor                             # 串口监控（可选）
 ```
 
+### Phase 7.6 OTA 发布（火线推修复）
+
+```bash
+# 一键发布：pio build → scp → 写 manifest → POST 广播
+cd X-Workspace/loiter
+scripts/publish_ota.sh 0.3.0                          # 全场所有设备
+scripts/publish_ota.sh 0.3.1 --targets card-30c6f7a8  # 定向某台设备
+scripts/publish_ota.sh 0.3.2 --no-broadcast           # 只传不广播（火警演练用）
+
+# 手动查/推
+curl -s https://loiter.polly.wang/firmware/manifest.json | python3 -m json.tool
+curl -X POST https://loiter.polly.wang/firmware/broadcast \
+  -H 'content-type: application/json' -d '{"targets":"all"}'
+```
+
+升级成功标志：Cardputer 全屏出现 `[████░░░░] 50%` 进度条 → `restarting` → splash 显示新 `v号`。失败（sha256 / 网络断）会自动还原到 lobby，老 partition 继续跑，不会变砖。
+
 ### 现场离线兜底（broker 上不去时）
 
 ```bash
@@ -540,7 +587,7 @@ pio device monitor                             # 串口监控（可选）
 # 2. Mac 上拉起本地服务
 brew services start mosquitto
 cd X-Workspace/loiter/server && uv sync
-set -a && source ../../../.Codex/skills/dream-painter/scripts/config.env && set +a
+set -a && source ../../../.claude/skills/dream-painter/scripts/config.env && set +a
 LOITER_MQTT_HOST=127.0.0.1 uv run uvicorn loiter.main:app --host 0.0.0.0 --port 8080
 # 3. Cardputer 重烧 → 走 LAN broker
 ```
@@ -601,7 +648,7 @@ PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
 
 ## 待办：项目立项后
 
-- [ ] Reviewer 批准本设计 → 把 `loiter` 加到根 `AGENTS.md` 的 Project Navigation Map 和 Architecture 图里
+- [ ] Reviewer 批准本设计 → 把 `loiter` 加到根 `CLAUDE.md` 的 Project Navigation Map 和 Architecture 图里
 - [ ] 创建 GitHub repo（如需公开）
 - [ ] 申请 `loiter.polly.wang` DNS 记录 + Cloudflare Tunnel
 - [ ] 提前 2 周拿到 1 台 Cardputer 做 Sprint 0 验证
@@ -610,13 +657,15 @@ PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
 
 ## 文档维护原则
 
-本 AGENTS.md 是**活文档**，跟 SoulPort/CopilotX 的 AGENTS.md 同一风格：
+本 CLAUDE.md 是**活文档**，跟 SoulPort/CopilotX 的 CLAUDE.md 同一风格：
 - 不写 changelog（git log 自带）
 - 不写版本号（git tag 自带）
 - 只写"如何做 / 当前状态 / 决策依据"
 - 决策变更 = 直接改这里 + 在 commit message 里说明 why
 
+</details>
+
 ---
 
-> Reviewers: 看完请直接在本文档上批注（diff/comment 均可），或在对话里说"P0.X 应该改成…"。
-> 我会按 review 反馈迭代下一版。
+> **v2 协作约定**：Claude (Copilot) 主 coding，每个 Phase 交付后 Polly + 小龙虾 + Codex 三人一起 review，通过后再推进下一 Phase。
+> Review 时直接在本文档批注（diff/comment 均可），或在对话里说"P0.X 应该改成…"。

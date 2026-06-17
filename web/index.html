@@ -1,2936 +1,2288 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>LOITER</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ISLANDS OF COLOR</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg-cream:   #faf6ee;
-    --bg-warm:    #f0ead8;
-    --gold:       #b08830;
-    --gold-bright:#d4a840;
-    --gold-dim:   rgba(176,136,48,0.12);
-    --crimson:    #c04040;
-    --purple:     #7c5cbf;
-    --teal:       #2a8a70;
-    --moon:       #f0dca0;
-    --parchment:  #5a4a38;
-    --fg:         #3a3530;
-    --fg-dim:     #8a7a68;
-    --ink:        #2a2420;
-    --ch-main:    #b08830;
-    --ch-fishing: #2a8a70;
-    --ch-help:    #7c5cbf;
-    --font-brush: 'Ma Shan Zheng', cursive;
-    --font-serif: 'Noto Serif SC', 'Georgia', serif;
-    --font-body:  'Noto Sans SC', -apple-system, sans-serif;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-cream); }
-  body { font-family: var(--font-body); color: var(--fg); -webkit-font-smoothing: antialiased; }
+/* Chinese pixel font — covers CJK characters Press Start 2P lacks.
+   size-adjust: 111% compensates the cap-height difference:
+   P2P capHeight/UPM = 296/400 = 0.740
+   Zpix capHeight/UPM = 800/1200 = 0.667  → ratio = 1.110          */
+@font-face {
+  font-family: 'Zpix';
+  src: url('https://cdn.jsdelivr.net/gh/SolidZORO/zpix-pixel-font@v3.1.11/dist/zpix.ttf')
+       format('truetype');
+  font-display: swap;
+  size-adjust: 111%;
+}
 
-  /* ═══ 顶栏 · 暖木横梁 ═══ */
-  #topbar {
-    position: fixed; top: 0; left: 0; right: 0; height: 52px;
-    display: flex; align-items: center; gap: 20px;
-    padding: 0 24px;
-    background: linear-gradient(180deg, rgba(255,252,244,0.96) 0%, rgba(248,242,228,0.94) 100%);
-    border-bottom: 1px solid rgba(180,150,100,0.18);
-    z-index: 10;
-    backdrop-filter: blur(8px);
-  }
-  #topbar::before {
-    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1.5px;
-    background: linear-gradient(90deg, transparent 5%, var(--gold) 30%, var(--gold-bright) 50%, var(--gold) 70%, transparent 95%);
-    opacity: 0.35;
-  }
-  #topbar::after {
-    content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
-    background: linear-gradient(90deg, transparent 10%, rgba(176,136,48,0.1) 50%, transparent 90%);
-  }
-  .brand {
-    font-family: var(--font-serif); font-size: 22px;
-    color: var(--gold);
-    text-shadow: 0 1px 4px rgba(176,136,48,0.2);
-    letter-spacing: 0.25em;
-    font-weight: 700;
-    user-select: none;
-  }
-  .brand-sub {
-    font-family: var(--font-serif); font-size: 11px;
-    color: var(--fg-dim); letter-spacing: 0.3em;
-    margin-left: -4px;
-  }
-  .stat { font-family: var(--font-serif); font-size: 13px; color: var(--fg-dim); letter-spacing: 1px; }
-  .stat b { color: var(--parchment); font-weight: 600; }
-  .chan {
-    font-family: var(--font-serif); font-size: 11px;
-    padding: 3px 14px; border-radius: 3px;
-    letter-spacing: 0.12em;
-    border: 1px solid transparent;
-    transition: all 0.3s;
-  }
-  .chan.main    { color: var(--ch-main);    border-color: rgba(176,136,48,0.2); }
-  .chan.fishing { color: var(--ch-fishing); border-color: rgba(42,138,112,0.2); }
-  .chan.help    { color: var(--ch-help);    border-color: rgba(124,92,191,0.2); }
-  .chan.empty   { opacity: 0.3; }
-  .spacer { flex: 1; }
-  #conn {
-    font-family: var(--font-serif); font-size: 11px;
-    padding: 3px 12px; border-radius: 3px;
-    letter-spacing: 1px;
-  }
-  #conn.ok  { color: var(--teal); border: 1px solid rgba(42,138,112,0.25); }
-  #conn.bad { color: var(--crimson); border: 1px solid rgba(192,64,64,0.25); animation: pulse-red 1.5s ease infinite; }
-  @keyframes pulse-red { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* ═══ 主画布 ═══ */
-  #hall {
-    position: fixed; top: 52px; left: 0; right: 0; bottom: 140px;
-    display: block; z-index: 2; background: transparent;
-  }
+:root {
+  --navy:     #12203a;
+  --frame:    #374880;
+  --frame-hi: #5c6db0;
+  --text:     #d8e2f4;
+  --dim:      #5868a8;
+  --chat-bg:  #0a1020;
+  --chat-bd:  #243068;
+  --img-w: 2752;
+  --img-h: 1536;
+  --chrome-h: 40px;
+  --status-h: 46px;   /* bottom status bar */
+}
 
-  /* ═══ 底部 · 竹简日志 ═══ */
-  #log {
-    position: fixed; left: 0; right: 0; bottom: 0; height: 140px;
-    padding: 14px 24px 12px;
-    background: linear-gradient(180deg, rgba(255,250,240,0.90) 0%, rgba(248,242,228,0.96) 100%);
-    border-top: 1px solid rgba(180,150,100,0.15);
-    font-family: var(--font-serif); font-size: 13px; line-height: 1.7;
-    overflow: hidden; z-index: 10;
-    backdrop-filter: blur(8px);
-  }
-  #log::before {
-    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
-    background: linear-gradient(90deg, transparent 10%, rgba(176,136,48,0.08) 50%, transparent 90%);
-  }
-  #log .line { white-space: nowrap; opacity: 0; animation: log-in 0.4s ease forwards; }
-  @keyframes log-in { to { opacity: 0.88; } }
-  #log .ts   { color: rgba(100,88,70,0.35); }
-  #log .nick { color: var(--gold); }
-  #log .sys  { color: var(--purple); }
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Press Start 2P', 'Zpix', monospace;
+  image-rendering: pixelated;
+  background:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='22' height='40' shape-rendering='crispEdges'><rect x='5' y='0' width='2' height='2' fill='%234B7186'/><rect x='4' y='2' width='4' height='2' fill='%234B7186'/><rect x='3' y='4' width='6' height='2' fill='%234B7186'/><rect x='2' y='6' width='8' height='2' fill='%234B7186'/><rect x='1' y='8' width='10' height='2' fill='%234B7186'/><rect x='4' y='10' width='4' height='8' fill='%234B7186'/><rect x='16' y='20' width='2' height='2' fill='%234B7186'/><rect x='15' y='22' width='4' height='2' fill='%234B7186'/><rect x='14' y='24' width='6' height='2' fill='%234B7186'/><rect x='13' y='26' width='8' height='2' fill='%234B7186'/><rect x='12' y='28' width='10' height='2' fill='%234B7186'/><rect x='15' y='30' width='4' height='8' fill='%234B7186'/></svg>")
+    0 0 /
+    min(calc(100vw * 66 / 2752), calc((100vh - var(--status-h)) * 66 / 1536))
+    min(calc(100vw * 120 / 2752), calc((100vh - var(--status-h)) * 120 / 1536))
+    repeat,
+    var(--navy);
+  color: var(--text);
+}
 
-  /* ═══ 空厅 ═══ */
-  #empty {
-    position: fixed; inset: 52px 0 140px 0;
-    display: flex; align-items: center; justify-content: center;
-    flex-direction: column; gap: 16px;
-    z-index: 5; pointer-events: none;
-    transition: opacity 0.6s;
-  }
-  #empty .glyph {
-    font-family: var(--font-brush); font-size: 48px;
-    color: var(--gold); opacity: 0.4;
-    animation: float 4s ease-in-out infinite;
-  }
-  #empty .hint {
-    font-family: var(--font-serif); font-size: 14px;
-    color: var(--fg-dim); letter-spacing: 0.3em;
-  }
-  #empty.hidden { opacity: 0; }
-  @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+/* ── Shell ──────────────────────────────────────────────── */
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
 
-  /* ═══ 成就 · 法阵召唤 ═══ */
-  #ach-overlay {
-    position: fixed; inset: 0; z-index: 58;
-    background: rgba(255,250,240,0); pointer-events: none;
-    transition: background 0.5s;
-  }
-  #ach-overlay.show { background: rgba(255,250,240,0.45); }
-  #ach {
-    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.7);
-    z-index: 60; pointer-events: none;
-    display: flex; flex-direction: column; align-items: center; gap: 8px;
-    padding: 32px 52px;
-    background: linear-gradient(180deg, rgba(255,252,244,0.97) 0%, rgba(248,242,228,0.99) 100%);
-    border: 1px solid rgba(176,136,48,0.2);
-    border-radius: 8px;
-    box-shadow: 0 4px 40px rgba(176,136,48,0.12), 0 0 80px rgba(176,136,48,0.06);
-    opacity: 0; transition: opacity 0.5s, transform 0.5s;
-    text-align: center;
-  }
-  #ach.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-  #ach .emoji { font-size: 52px; line-height: 1; filter: drop-shadow(0 0 12px rgba(176,136,48,0.3)); }
-  #ach .label {
-    font-family: var(--font-serif); font-size: 11px;
-    letter-spacing: 0.5em; color: var(--gold); opacity: 0.7;
-  }
-  #ach .title {
-    font-family: var(--font-brush); font-size: 32px;
-    color: var(--gold);
-    text-shadow: 0 1px 8px rgba(176,136,48,0.3);
-  }
-  #ach .who  { font-family: var(--font-serif); font-size: 13px; color: var(--fg-dim); }
-  #ach .desc { font-family: var(--font-serif); font-size: 12px; color: var(--fg-dim); opacity: 0.7; }
+/* ── Map area: all space above the message bar ──────────── */
+/*
+  Background = tiling pixel-tree SVG + navy base colour.
+  The map image floats on top; every pixel of empty space
+  (left/right/top/bottom gaps when viewport != map ratio,
+  and the reserved 296px right strip for the chat panel)
+  is automatically filled with trees — no JS needed.
+*/
+.map-area {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  image-rendering: pixelated;
+  background:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='22' height='40' shape-rendering='crispEdges'><rect x='5' y='0' width='2' height='2' fill='%234B7186'/><rect x='4' y='2' width='4' height='2' fill='%234B7186'/><rect x='3' y='4' width='6' height='2' fill='%234B7186'/><rect x='2' y='6' width='8' height='2' fill='%234B7186'/><rect x='1' y='8' width='10' height='2' fill='%234B7186'/><rect x='4' y='10' width='4' height='8' fill='%234B7186'/><rect x='16' y='20' width='2' height='2' fill='%234B7186'/><rect x='15' y='22' width='4' height='2' fill='%234B7186'/><rect x='14' y='24' width='6' height='2' fill='%234B7186'/><rect x='13' y='26' width='8' height='2' fill='%234B7186'/><rect x='12' y='28' width='10' height='2' fill='%234B7186'/><rect x='15' y='30' width='4' height='8' fill='%234B7186'/></svg>")
+    0 0 /
+    min(calc(100vw * 66 / 2752), calc((100vh - var(--status-h)) * 66 / 1536))
+    min(calc(100vw * 120 / 2752), calc((100vh - var(--status-h)) * 120 / 1536))
+    repeat,
+    var(--navy);
+  padding-right: 296px;
+  transition: padding-right 120ms steps(4);
+}
+.map-area.chat-closed {
+  padding-right: 0;
+}
 
-  /* ═══ 破冰卷轴 ═══ */
-  #task-scroll {
-    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.8);
-    z-index: 55; pointer-events: none;
-    width: 300px; padding: 28px 36px;
-    background: linear-gradient(180deg, rgba(255,252,244,0.97) 0%, rgba(248,242,228,0.99) 100%);
-    border: 1px solid rgba(176,136,48,0.15);
-    border-radius: 8px;
-    box-shadow: 0 4px 30px rgba(176,136,48,0.08);
-    opacity: 0; transition: opacity 0.5s, transform 0.5s;
-    text-align: center;
-  }
-  #task-scroll.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-  #task-scroll.burn {
-    opacity: 0; transform: translate(-50%, -50%) scale(1.15);
-    filter: brightness(1.3) sepia(0.3);
-    transition: all 0.7s;
-  }
-  #task-scroll .scroll-ornament {
-    font-family: var(--font-serif); font-size: 10px;
-    letter-spacing: 0.6em; color: var(--gold); opacity: 0.3;
-  }
-  #task-scroll .task-who {
-    font-family: var(--font-serif); font-size: 13px;
-    color: var(--fg-dim); margin: 8px 0 2px;
-  }
-  #task-scroll .task-title {
-    font-family: var(--font-brush); font-size: 26px;
-    color: var(--gold);
-    text-shadow: 0 1px 6px rgba(176,136,48,0.2);
-  }
-  #task-scroll .task-desc {
-    font-family: var(--font-serif); font-size: 13px;
-    color: var(--fg-dim); margin-top: 4px;
-  }
-  #task-scroll .task-done {
-    font-size: 28px; margin-top: 8px; display: none;
-    filter: drop-shadow(0 0 8px rgba(176,136,48,0.3));
-  }
-  #task-scroll.complete .task-done { display: block; }
+/*
+  Responsive map container.
+  Rule: be as large as possible while fitting both
+        the available width  (100% of .map-area)
+    and the available height (100vh - bar-h).
 
-  /* ═══ 匿名告白墙 ═══ */
-  #anon-wall {
-    position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
-    z-index: 200; pointer-events: none;
-    display: flex; flex-direction: column; align-items: center; gap: 12px;
-  }
-  .anon-bubble {
-    background: rgba(255,252,245,0.55);
-    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-    border: 1.5px solid rgba(200,170,110,0.3);
-    border-radius: 20px;
-    padding: 16px 28px;
-    max-width: 460px;
-    font-size: 20px; color: #5a4a38;
-    box-shadow: 0 8px 40px rgba(176,136,48,0.1);
-    animation: anon-float 0.6s ease-out forwards, anon-drift 4s ease-in-out 0.6s infinite, anon-glow 3s ease-in-out 0.6s infinite;
-    opacity: 0;
-    text-align: center;
-    font-family: var(--font-serif);
-    font-style: italic;
-    letter-spacing: 0.5px;
-  }
-  .anon-bubble .anon-label {
-    display: block; font-size: 10px; font-style: normal;
-    letter-spacing: 0.3em; color: rgba(160,130,80,0.5);
-    margin-bottom: 4px; font-family: var(--font-body);
-  }
-  @keyframes anon-drift {
-    0%, 100% { transform: translateY(0); }
-    50%      { transform: translateY(-6px); }
-  }
-  @keyframes anon-glow {
-    0%, 100% { border-color: rgba(200,170,110,0.15); box-shadow: 0 8px 40px rgba(176,136,48,0.06); }
-    50%      { border-color: rgba(200,170,110,0.45); box-shadow: 0 8px 40px rgba(176,136,48,0.18); }
-  }
-  .anon-bubble .anon-icon { margin-right: 6px; }
-  @keyframes anon-float {
-    from { opacity: 0; transform: translateY(20px) scale(0.9); }
-    to   { opacity: 1; transform: translateY(0) scale(1); }
-  }
-  @keyframes anon-fade {
-    from { opacity: 1; }
-    to   { opacity: 0; transform: translateY(-10px); }
-  }
+  width = min(
+    fill-available-width,
+    fill-available-height × image-aspect-ratio
+  )
+  height is derived from width via aspect-ratio.
+*/
+.map-wrap {
+  position: relative;
+  aspect-ratio: 2752 / 1536;
+  width: min(
+    100%,
+    calc((100vh - var(--status-h)) * 2752 / 1536)
+  );
+}
 
-  /* ═══ 问答赛计分板 ═══ */
-  #quiz-panel {
-    position: fixed; top: 60px; right: 20px;
-    z-index: 200; width: 260px;
-    background: linear-gradient(135deg, rgba(255,250,240,0.95), rgba(255,245,230,0.95));
-    backdrop-filter: blur(10px);
-    border: 2px solid rgba(200,160,80,0.6);
-    border-radius: 14px;
-    padding: 16px;
-    box-shadow: 0 6px 30px rgba(180,140,60,0.25);
-    font-family: inherit;
-    display: none;
-    transition: opacity 0.3s, transform 0.3s;
-  }
-  #quiz-panel.show { display: block; animation: quiz-in 0.4s ease-out; }
-  @keyframes quiz-in {
-    from { opacity: 0; transform: translateX(40px); }
-    to   { opacity: 1; transform: translateX(0); }
-  }
-  .quiz-header {
-    font-size: 18px; font-weight: bold; color: #8b6914;
-    text-align: center; margin-bottom: 10px;
-    text-shadow: 0 1px 2px rgba(200,160,60,0.3);
-  }
-  .quiz-question {
-    font-size: 14px; color: #3a3530;
-    background: rgba(255,255,255,0.6);
-    border-radius: 8px; padding: 10px;
-    margin-bottom: 8px;
-    min-height: 30px;
-  }
-  .quiz-timer {
-    text-align: center; font-size: 12px;
-    color: #a08040; margin-bottom: 8px;
-  }
-  .quiz-scores {
-    font-size: 13px; color: #3a3530;
-  }
-  .quiz-scores .score-row {
-    display: flex; justify-content: space-between;
-    padding: 3px 4px;
-    border-bottom: 1px solid rgba(200,180,140,0.3);
-  }
-  .quiz-scores .score-row:first-child {
-    font-weight: bold; color: #8b6914;
-  }
-  .quiz-scores .score-row .rank { width: 20px; }
-  .quiz-scores .score-row .name { flex: 1; }
-  .quiz-scores .score-row .pts { width: 30px; text-align: right; }
-  .quiz-status {
-    text-align: center; font-size: 12px;
-    color: #a08040; margin-top: 8px;
-    font-style: italic;
-  }
+/* ── Pixel-art source image ─────────────────────────────── */
+.map-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /*
+    No object-fit needed: the wrapper already has the exact
+    same aspect ratio as the image, so it fills flush.
+  */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges; /* Firefox */
+  user-select: none;
+  -webkit-user-drag: none;
+  transition: filter .8s ease;   /* P3b 高潮：饱和度跳升 */
+}
+/* P3b reveal 高潮：6 岛色彩瞬间变鲜艳（Designer PRD §8.3 saturate 跳升）*/
+.map-img.phase3b-active { filter: saturate(1.35) brightness(1.04); }
+/* 中央彩虹弧（复用 #hiArcLayer SVG，P3b 升起，2.5s 画完）*/
+#centralArc { fill: none; stroke: url(#hiRainbow); stroke-linecap: round;
+  filter: drop-shadow(0 0 14px rgba(255,170,255,.5)); }
+#centralArc.draw { animation: arcDraw 2.5s ease forwards; }
+@keyframes arcDraw { from { stroke-dashoffset: var(--arc-len); opacity: 0; }
+  40% { opacity: 1; } to { stroke-dashoffset: 0; opacity: 1; } }
 
-  /* ═══ 暗角（极淡暖色） ═══ */
-  #vignette {
-    position: fixed; inset: 0; pointer-events: none; z-index: 50;
-    background: radial-gradient(ellipse at center, transparent 50%, rgba(200,180,140,0.12) 100%);
-  }
+/* ── Wave animation overlays ────────────────────────────── */
+/*
+  All overlays are absolute, inset:0 → same footprint as
+  the image. mix-blend-mode:screen brightens the dark ocean
+  pixels while the already-bright island colours stay put.
+*/
+.wave-stripe {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
 
-  /* ═══ Sprint 7: 技能融合 toast（顶部居中粉紫渐变）═══ */
-  #pair-toast {
-    position: fixed; top: 80px; left: 50%; transform: translateX(-50%) translateY(-20px);
-    z-index: 250; pointer-events: none;
-    background: linear-gradient(135deg, rgba(255,210,235,0.92), rgba(220,190,255,0.92));
-    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-    border: 2px solid rgba(220,140,200,0.6);
-    border-radius: 16px;
-    padding: 14px 30px;
-    min-width: 360px; max-width: 560px;
-    text-align: center;
-    box-shadow: 0 12px 48px rgba(220,120,200,0.35);
-    opacity: 0; transition: opacity 0.4s, transform 0.4s;
-    font-family: var(--font-serif);
-  }
-  #pair-toast.show {
-    opacity: 1; transform: translateX(-50%) translateY(0);
-  }
-  #pair-toast .pair-label {
-    font-size: 11px; letter-spacing: 0.35em;
-    color: rgba(140,60,140,0.65); margin-bottom: 6px;
-    font-family: var(--font-body); font-weight: bold;
-  }
-  #pair-toast .pair-pair {
-    font-size: 22px; color: #5a2a5a; font-weight: bold;
-    margin-bottom: 6px;
-  }
-  #pair-toast .pair-gained {
-    font-size: 16px; color: #4a3a5a;
-    line-height: 1.6;
-  }
-  #pair-toast .pair-gained .arrow {
-    color: rgba(140,60,140,0.5); margin: 0 8px;
-  }
-  #pair-toast .pair-ult {
-    margin-top: 8px;
-    font-size: 13px; color: #b8005a; font-weight: bold;
-    letter-spacing: 0.15em;
-  }
-  #pair-toast.omni {
-    background: linear-gradient(135deg,
-      rgba(255,240,180,0.95), rgba(255,200,255,0.95),
-      rgba(200,230,255,0.95), rgba(220,255,210,0.95));
-    border-color: rgba(220,180,80,0.85);
-    box-shadow: 0 0 80px rgba(255,200,100,0.6), 0 0 120px rgba(220,140,255,0.4);
-  }
+/* Primary slow stripes — scroll downward */
+.wave-stripe::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent    0,  transparent    9px,
+    rgba(60,110,210,.17) 9px, rgba(60,110,210,.17) 10px
+  );
+  animation: stripeDown 5s linear infinite;
+}
+/* Secondary finer stripes — scroll upward */
+.wave-stripe::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent    0,  transparent    5px,
+    rgba(90,150,255,.08) 5px, rgba(90,150,255,.08) 6px
+  );
+  animation: stripeDown 3.2s linear infinite reverse;
+}
+@keyframes stripeDown {
+  from { background-position: 0 0;   }
+  to   { background-position: 0 10px;}
+}
+
+/* Soft radial shimmer — pulses slowly */
+.wave-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 68% 52% at 50% 53%,
+    rgba(28,58,140,.4) 0%, transparent 68%
+  );
+  mix-blend-mode: screen;
+  animation: glowPulse 9s ease-in-out infinite alternate;
+}
+@keyframes glowPulse {
+  from { opacity: .35; }
+  to   { opacity: .85; }
+}
+
+/* SVG sinusoidal wave lines that drift horizontally.
+   viewBox proportional to image → no distortion. */
+.wave-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.wl { fill: none; stroke-linecap: round; }
+/* Each class uses a different drift speed/direction */
+.w1 { animation: wDrift  4.4s ease-in-out infinite; }
+.w2 { animation: wDrift  6.1s ease-in-out infinite reverse; }
+.w3 { animation: wDrift  3.7s ease-in-out infinite; animation-delay: -1.5s; }
+.w4 { animation: wDrift  5.3s ease-in-out infinite reverse; animation-delay: -2.8s; }
+@keyframes wDrift {
+  0%,100% { transform: translateX(0);    }
+  50%     { transform: translateX(-1.4%);}
+}
+
+/* ── Chat panel — fixed right sidebar, open by default ───── */
+.chat-panel {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: var(--status-h);
+  width: 296px;
+  background: var(--chat-bg);
+  border-left: 2px solid var(--chat-bd);
+  display: flex;
+  flex-direction: column;
+  z-index: 50;
+  transform: translateX(0);
+  transition: transform 120ms steps(4);
+}
+.chat-panel.closed { transform: translateX(100%); }
+
+/* Vertical tab on the left edge — always visible */
+.chat-tab {
+  position: absolute;
+  left: -28px; top: 50%;
+  transform: translateY(-50%);
+  width: 28px; height: 110px;
+  background: var(--chat-bg);
+  border: 2px solid var(--chat-bd);
+  border-right: none;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  user-select: none;
+}
+.chat-tab:hover { background: #131d40; }
+.chat-tab span {
+  writing-mode: vertical-rl;
+  font-size: 7px; letter-spacing: 2px;
+  color: var(--frame-hi);
+}
+
+.chat-header {
+  flex-shrink: 0;
+  padding: 10px 12px;
+  border-bottom: 2px solid var(--chat-bd);
+  font-size: 8px; color: var(--frame-hi);
+  display: flex; align-items: center; gap: 8px;
+}
+.live-dot {
+  width: 8px; height: 8px;            /* larger for visibility */
+  background: #56e056;
+  flex-shrink: 0;
+  animation: blink 1.5s steps(1) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+.chat-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 10px 8px;
+  display: flex; flex-direction: column;
+  gap: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--chat-bd) transparent;
+}
+.chat-log::-webkit-scrollbar { width: 4px; }
+.chat-log::-webkit-scrollbar-thumb { background: var(--chat-bd); }
+
+.log-row {
+  display: flex; gap: 6px;
+  align-items: flex-start;
+  padding: 5px 0 4px;
+  border-bottom: 1px solid rgba(36,48,104,.35);
+  font-size: 8px; line-height: 1.7;   /* readable at a glance */
+}
+.log-ts    { color: var(--dim); flex-shrink: 0; font-size: 7px; }
+.log-join  { color: #f0d870; }
+.log-event { color: #78e078; }
+.log-msg   { color: var(--text); }
+.log-conn  { color: #a898f8; }
+
+
+/* ── Bottom HUD bar ─────────────────────────────────────── */
+.status-bar {
+  flex-shrink: 0;
+  height: var(--status-h);
+  display: flex;
+  align-items: center;
+  background: #080c1a;
+  border-top: 2px solid var(--frame);
+  position: relative;
+  z-index: 10;
+}
+
+/* Primary anchor: ONLINE count — left, largest */
+.hud-primary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px;
+  border-right: 1px solid var(--chat-bd);
+  height: 100%;
+}
+.hud-primary-num {
+  font-size: 20px;
+  color: #56e056;
+  line-height: 1;
+}
+.hud-primary-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+.hud-live-dot {
+  width: 6px; height: 6px;
+  background: #56e056;
+  flex-shrink: 0;
+  animation: blink 1.5s steps(1) infinite;
+}
+.hud-primary-label {
+  font-size: 5px;
+  letter-spacing: 1px;
+  color: var(--dim);
+}
+
+/* Secondary metrics: inline number + label pairs */
+.hud-secondary {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 4px;
+}
+.hud-metric {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 0 16px;
+  border-right: 1px solid var(--chat-bd);
+  height: 100%;
+  align-items: center;
+}
+.hud-metric-val {
+  font-size: 18px;
+  color: var(--text);
+  line-height: 1;
+}
+.hud-metric-label {
+  font-size: 4.5px;
+  letter-spacing: 1px;
+  color: var(--dim);
+}
+
+/* Spacer fills gap between metrics and island chips */
+.hud-spacer { flex: 1; }
+
+/* 6 island colour chips — right accent, purely decorative now */
+.hud-islands {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px;
+  border-left: 1px solid var(--chat-bd);
+  height: 100%;
+}
+.hud-island-label {
+  font-size: 4.5px;
+  letter-spacing: 1px;
+  color: var(--dim);
+}
+.hud-chips {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+.hud-chip {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* ── Dev toggle button ──────────────────────────────────── */
+.dev-toggle {
+  position: fixed;
+  bottom: calc(var(--status-h) + 8px);
+  left: 12px;
+  background: rgba(255,136,0,.15);
+  border: 1px solid rgba(255,136,0,.5);
+  color: #ff8800;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 6px;
+  padding: 5px 9px;
+  cursor: pointer;
+  z-index: 95;
+  letter-spacing: 1px;
+}
+.dev-toggle:hover { background: rgba(255,136,0,.3); }
+
+/* ── Dev floating panel ─────────────────────────────────── */
+.dev-overlay { display: none; } /* no backdrop for corner panel */
+
+.dev-panel {
+  position: fixed;
+  bottom: calc(var(--status-h) + 36px); /* anchors just above the ⚙ DEV button */
+  left: 12px;
+  width: 480px;
+  background: #080d1c;
+  border: 2px solid #ff8800;
+  z-index: 200;
+  display: none;
+}
+.dev-panel.open { display: block; }
+
+.dev-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255,136,0,.2);
+}
+.dev-header-title {
+  font-size: 6px;
+  letter-spacing: 2px;
+  color: #ff8800;
+}
+.dev-close {
+  background: none;
+  border: 1px solid rgba(255,136,0,.4);
+  color: #ff8800;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px;
+  width: 20px; height: 20px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.dev-close:hover { background: rgba(255,136,0,.2); }
+
+.dev-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dev-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dev-row-label {
+  font-size: 5px;
+  color: rgba(255,136,0,.7);
+  letter-spacing: 1px;
+  width: 52px;
+  flex-shrink: 0;
+  text-align: right;
+}
+.dev-divider {
+  height: 1px;
+  background: rgba(255,136,0,.12);
+}
+.dev-label { font-size: 5px; color: #ff8800; white-space: nowrap; flex-shrink: 0; }
+.dev-input {
+  flex: 1;
+  background: rgba(255,136,0,.07);
+  border: 1px solid rgba(255,136,0,.4);
+  color: #ffd080;
+  font-family: 'Press Start 2P', 'Zpix', monospace;
+  font-size: 6px; padding: 6px 10px; outline: none;
+}
+.dev-input::placeholder { color: rgba(255,136,0,.3); }
+.dev-input:focus { border-color: #ff8800; }
+.dev-btn {
+  background: rgba(255,136,0,.12);
+  border: 1px solid rgba(255,136,0,.45);
+  color: #ffd080;
+  font-family: 'Press Start 2P', 'Zpix', monospace;
+  font-size: 5.5px; padding: 6px 10px;
+  cursor: pointer; white-space: nowrap; flex-shrink: 0;
+}
+.dev-btn:hover  { background: rgba(255,136,0,.28); }
+.dev-btn:active { transform: translate(1px,1px); }
+.dev-btn.jump { border-color: rgba(200,80,255,.6); color: #dd88ff; background: rgba(180,60,255,.1); }
+.dev-btn.jump:hover { background: rgba(180,60,255,.25); }
+.dev-btn.p3   { border-color: rgba(80,80,160,.55); color: #a0a0f8; background: rgba(40,40,120,.12); }
+.dev-btn.p3:hover { background: rgba(40,40,120,.28); }
+.dev-count { font-size: 8px; color: #56e056; min-width: 22px; text-align: center; flex-shrink: 0; }
+.dev-sep { color: rgba(255,136,0,.25); flex-shrink: 0; }
+
+
+
+/* ── Character sprites on map — real carry sprites ────────── */
+.char-anchor {
+  position: absolute;
+  pointer-events: none;   /* anchor transparent; char-wrap catches events */
+}
+.char-wrap {
+  transform: translate(-50%, -100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  pointer-events: auto;
+  cursor: grab;
+  animation: charEnter .25s steps(3) forwards;
+}
+.char-wrap:active { cursor: grabbing; }
+@keyframes charEnter {
+  from { opacity: 0; transform: translate(-50%, calc(-100% + 12px)); }
+  to   { opacity: 1; transform: translate(-50%, -100%); }
+}
+.char-label {
+  background: rgba(26,23,38,.92);
+  border: 1px solid rgba(248,225,160,.5);
+  color: #f8e1a0;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 8px;
+  padding: 2px 5px;
+  white-space: nowrap;
+  line-height: 1.5;
+  user-select: none;
+}
+/* Sprite at original 32×64px, no scaling */
+.char-sprite {
+  width: 32px; height: 64px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.char-sprite img {
+  width: 100%; height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.skin-light { background: url('sprite_action_test/b01_01_carry.png') 0 0/384px 64px no-repeat; }
+.skin-med   { background: url('sprite_action_test/b04_09_carry.png') 0 0/384px 64px no-repeat; }
+.skin-dark  { background: url('sprite_action_test/b07_32_carry.png') 0 0/384px 64px no-repeat; }
+.char-sprite.acting { animation: carryPlay 1.5s steps(12) infinite; }
+.char-sprite.bouncing { animation: charBounce 0.45s ease-out; }
+@keyframes carryPlay {
+  from { background-position: 0 0; }
+  to   { background-position: -384px 0; }
+}
+@keyframes charBounce {
+  0%   { transform: translateY(0); }
+  30%  { transform: translateY(-18px); }
+  50%  { transform: translateY(-12px); }
+  70%  { transform: translateY(-16px); }
+  100% { transform: translateY(0); }
+}
+
+/* ── Phase 3b story dots ─────────────────────────────────── */
+.story-dot {
+  position: absolute;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.7);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 0 6px 1px currentColor;
+  transform: translate(-50%, -50%) scale(0);
+  cursor: pointer;
+  z-index: 80;
+  animation: dotPop .3s steps(3) forwards;
+}
+.story-dot:hover {
+  transform: translate(-50%,-50%) scale(1.7);
+  border-color: #fff;
+  transition: transform .1s steps(2), border-color .1s;
+}
+@keyframes dotPop {
+  from { transform: translate(-50%,-50%) scale(0); }
+  to   { transform: translate(-50%,-50%) scale(1); }
+}
+
+/* Story card tooltip */
+.story-card {
+  position: absolute;
+  background: #1a1726;
+  border: 2px solid #f8e1a0;
+  box-shadow: 4px 4px 0 #0a0810;
+  padding: 12px 14px 10px;
+  width: 280px;
+  max-height: 420px;
+  overflow-y: auto;
+  z-index: 90;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+.sc-name {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px;
+  color: #f8e1a0;
+  margin-bottom: 8px;
+}
+.sc-spectrum {
+  display: flex; gap: 4px;
+  margin-bottom: 8px;
+}
+.sc-color { width: 12px; height: 12px; }
+.sc-text {
+  font-family: 'Press Start 2P', 'Zpix', monospace;
+  font-size: 7px;
+  color: #c8bef0;
+  line-height: 2.0;
+}
+
+/* ── HI particle effects (ported from signature_actions.html) ── */
+.map-particle {
+  position: absolute;
+  font-size: 20px;
+  pointer-events: none;
+  z-index: 60;
+}
+.map-particle::before { display: inline-block; }
+
+.map-particle.sparkle::before {
+  content: "✨";
+  animation: sparkle-anim 1.2s ease-in-out 2;
+  transform-origin: center;
+}
+.map-particle.heart::before {
+  content: "❤️";
+  animation: heart-anim 1.6s ease-out 2;
+}
+.map-particle.leaf::before {
+  content: "🍃";
+  animation: leaf-anim 1.8s ease-in-out 2;
+  transform-origin: center;
+}
+.map-particle.butterfly::before {
+  content: "🦋";
+  animation: butterfly-anim 1.6s ease-in-out 2;
+  transform-origin: center;
+}
+@keyframes sparkle-anim {
+  0%   { opacity:0; transform:translate(-50%,0) scale(.3) rotate(0deg); }
+  30%  { opacity:1; transform:translate(-50%,-6px) scale(1.1) rotate(15deg); }
+  60%  { opacity:1; transform:translate(-50%,-14px) scale(.9) rotate(-15deg); }
+  100% { opacity:0; transform:translate(-50%,-22px) scale(.4) rotate(30deg); }
+}
+@keyframes heart-anim {
+  0%   { opacity:0; transform:translate(-50%,5px) scale(.4); }
+  20%  { opacity:1; transform:translate(-50%,-4px) scale(1.2); }
+  35%  { opacity:1; transform:translate(-50%,-10px) scale(.95); }
+  100% { opacity:0; transform:translate(-50%,-40px) scale(.8); }
+}
+@keyframes leaf-anim {
+  0%   { opacity:0; transform:translate(-50%,-8px) rotate(0deg) scale(.4); }
+  20%  { opacity:1; transform:translate(-50%,-2px) rotate(120deg) scale(1); }
+  50%  { opacity:1; transform:translate(-40%,4px) rotate(240deg) scale(.95); }
+  80%  { opacity:1; transform:translate(-60%,10px) rotate(360deg) scale(.85); }
+  100% { opacity:0; transform:translate(-50%,16px) rotate(450deg) scale(.6); }
+}
+@keyframes butterfly-anim {
+  0%   { opacity:0; transform:translate(-50%,8px) rotate(0deg); }
+  15%  { opacity:1; transform:translate(-70%,-2px) rotate(-12deg); }
+  35%  { opacity:1; transform:translate(-30%,-10px) rotate(12deg); }
+  55%  { opacity:1; transform:translate(-65%,-18px) rotate(-10deg); }
+  75%  { opacity:1; transform:translate(-35%,-26px) rotate(8deg); }
+  100% { opacity:0; transform:translate(-50%,-34px) rotate(0deg); }
+}
+
+/* ── SAY fly-text (top scrolling tracks) ────────────────── */
+/*
+  3 horizontal tracks near the top of the map.
+  Messages scroll right → left; queue waits for a free track.
+  Handles bursts gracefully — no stacking.
+*/
+.say-track-msg {
+  position: absolute;
+  left: 0;
+  white-space: nowrap;
+  font-family: 'Press Start 2P', 'Zpix', monospace;
+  font-size: 11px;
+  color: #e8e1f5;
+  text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+  pointer-events: none;
+  z-index: 45;           /* below chat panel (z-index:50) — hides behind it */
+  will-change: transform;
+}
+
+/* ── HI arc ─────────────────────────────────────────────── */
+.hi-arc-svg {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none; overflow: visible;
+}
+/* "..." speech bubble during HI */
+.hi-bubble {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  background: rgba(26,23,38,.92);
+  border: 1px solid rgba(248,225,160,.5);
+  color: #f8e1a0;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px; padding: 2px 5px;
+  pointer-events: none; white-space: nowrap;
+  z-index: 60;
+}
+
+/* ── JUMP effect ────────────────────────────────────────── */
+#jumpCanvas {
+  position: fixed; inset: 0;
+  z-index: 400; pointer-events: none;
+  display: none; image-rendering: pixelated;
+}
+/* ── Phase 3a dim overlay ────────────────────────────────── */
+.dim-overlay {
+  position: fixed; inset: 0;
+  background: rgba(8,6,16,0);   /* starts transparent */
+  z-index: 300;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 2s ease-in; /* 2s fade to dark */
+}
+.dim-overlay.active {
+  background: rgba(8,6,16,.88);
+}
+
+/* Pixel-art message that fades in after dim completes */
+.dim-message {
+  text-align: center;
+  opacity: 0;
+  transition: opacity 1s ease;
+  transition-delay: 1.5s;
+}
+.dim-overlay.active .dim-message {
+  opacity: 1;
+}
+.dim-msg-line1 {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+  color: rgba(248,225,160,.55);  /* dim gold, not screaming */
+  letter-spacing: 2px;
+  line-height: 2.2;
+  display: block;
+}
+.dim-msg-line2 {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 16px;
+  color: #f8e1a0;
+  letter-spacing: 2px;
+  line-height: 1.8;
+  display: block;
+}
+.dim-msg-line3 {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 8px;
+  color: rgba(216,226,244,.45);
+  letter-spacing: 1px;
+  line-height: 2.5;
+  display: block;
+}
+
+.jump-flash {
+  position: fixed; inset: 0;
+  background: rgba(255,255,255,.35);
+  z-index: 500; pointer-events: none;
+  animation: flashFade .3s steps(3) forwards;
+}
+@keyframes flashFade {
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ── Floating message card — pixel art style ────────────── */
+.float-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 200; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+}
+.float-card {
+  position: absolute;
+  /* Deep purple pixel-art card — matches the dark screen palette */
+  background: #1e1a30;
+  border: 3px solid #f8e1a0;
+  /* Pixel drop shadow: thin dark outline + offset block */
+  box-shadow:
+    0 0 0 1px #0a0e20,
+    6px 6px 0 #0a0e20;
+  padding: 18px 26px 16px;
+  max-width: 380px; min-width: 200px;
+  text-align: center;
+  /* Stepped entry/exit keeps pixel-art feel */
+  animation: cardIn .18s steps(4) forwards,
+             cardOut .2s  steps(4) forwards 3.3s;
+}
+@keyframes cardIn  {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes cardOut {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-16px); }
+}
+
+/* "ANONYMOUS" — gold spaced label */
+.float-who {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 6px; letter-spacing: 3px;
+  color: #f8e1a0;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+}
+
+/* Message row: icon + text */
+.float-body {
+  display: flex; align-items: center;
+  gap: 10px; justify-content: center;
+}
+.float-icon { font-size: 18px; flex-shrink: 0; }
+
+/* Message text in Press Start 2P — unified pixel style */
+.float-msg {
+  font-family: 'Press Start 2P', 'Zpix', monospace;
+  font-size: 11px; line-height: 1.7;
+  color: #dce4f8;
+  word-break: break-word; text-align: left;
+}
+/* ── Animated element overlay SVG ──────────────────────── */
+.anim-svg {
+  position: absolute;
+  inset: 0; width: 100%; height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+/* Tower flag: 2-frame sprite swap */
+.flag-f1 { animation: flagOn  .72s steps(1) infinite; }
+.flag-f2 { animation: flagOff .72s steps(1) infinite; }
+@keyframes flagOn  { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+@keyframes flagOff { 0%,49%{opacity:0} 50%,100%{opacity:1} }
+
+/* Lighthouse: core + halo + beam blink together */
+.bcn-core,
+.bcn-halo,
+.bcn-beam { animation: beaconBlink 2.8s steps(1) infinite; }
+.bcn-halo { animation-delay: 0s;   }
+.bcn-beam { animation-delay: 0s;   }
+@keyframes beaconBlink {
+  0%,24%  { opacity: 1; }
+  25%,100%{ opacity: 0; }
+}
+
+/* Ocean sparkles: brief flash, then long dark gap */
+.sp {
+  fill: rgba(200,232,255,.9);
+  animation-name: sparkFlash;
+  animation-timing-function: steps(1);
+  animation-iteration-count: infinite;
+}
+.sp1 { animation-duration:2.7s; animation-delay: 0.0s; }
+.sp2 { animation-duration:3.3s; animation-delay:-1.4s; }
+.sp3 { animation-duration:2.4s; animation-delay:-0.7s; }
+.sp4 { animation-duration:3.8s; animation-delay:-2.2s; }
+.sp5 { animation-duration:2.9s; animation-delay:-1.1s; }
+.sp6 { animation-duration:3.5s; animation-delay:-0.4s; }
+.sp7 { animation-duration:2.2s; animation-delay:-1.8s; }
+.sp8 { animation-duration:3.1s; animation-delay:-0.9s; }
+@keyframes sparkFlash {
+  0%,14%     { opacity: 1; }
+  15%,100%   { opacity: 0; }
+}
 </style>
 </head>
 <body>
 
-<div id="topbar">
-  <span class="brand">LOITER</span>
-  <span class="stat">Room <b id="room">hall</b></span>
-  <span class="stat">Online <b id="count">0</b></span>
-  <span class="stat">Msgs <b id="msgs">0</b></span>
-  <span class="chan main empty"    id="ch-main">#MAIN 0</span>
-  <span class="chan fishing empty" id="ch-fishing">#FISH 0</span>
-  <span class="chan help empty"    id="ch-help">#HELP 0</span>
-  <span class="spacer"></span>
-  <span id="conn" class="bad">connecting…</span>
+<div class="page">
+  <!-- ── Map area (full height minus status bar) ── -->
+  <div class="map-area">
+    <div class="map-wrap">
+
+      <!-- ① Original pixel-art image — perfectly fills the wrapper -->
+      <img class="map-img"
+           src="islands_map.png"
+           alt="Islands of Color">
+
+      <!-- ② Animated horizontal stripe waves (screen blend) -->
+      <div class="wave-stripe"></div>
+
+      <!-- ③ Radial shimmer glow -->
+      <div class="wave-glow"></div>
+
+      <!-- ④ SVG sinusoidal drift lines in ocean gaps.
+              viewBox 2752×1536 matches the image exactly. -->
+      <svg class="wave-svg"
+           viewBox="0 0 2752 1536"
+           preserveAspectRatio="none">
+
+        <!-- Upper channel between Ember and Mist (~y 420) -->
+        <path class="wl w2"
+          stroke="rgba(100,160,255,.22)" stroke-width="5"
+          d="M-40,420 Q68,410 136,420 Q204,430 272,420 Q340,410 408,420 Q476,430 544,420 Q612,410 680,420 Q748,430 816,420 Q884,410 952,420 Q1020,430 1088,420 Q1156,410 1224,420 Q1292,430 1360,420 Q1428,410 1496,420 Q1564,430 1632,420 Q1700,410 1768,420 Q1836,430 1904,420 Q1972,410 2040,420 Q2108,430 2176,420 Q2244,410 2312,420 Q2380,430 2448,420 Q2516,410 2584,420 Q2652,430 2720,420 Q2756,418 2800,420"/>
+
+        <!-- Mid-ocean band (~y 810) -->
+        <path class="wl w1"
+          stroke="rgba(100,160,255,.2)" stroke-width="5"
+          d="M-40,810 Q82,802 164,810 Q246,818 328,810 Q410,802 492,810 Q574,818 656,810 Q738,802 820,810 Q902,818 984,810 Q1066,802 1148,810 Q1230,818 1312,810 Q1394,802 1476,810 Q1558,818 1640,810 Q1722,802 1804,810 Q1886,818 1968,810 Q2050,802 2132,810 Q2214,818 2296,810 Q2378,802 2460,810 Q2542,818 2624,810 Q2706,802 2800,810"/>
+
+        <!-- Lower ocean (~y 1200) -->
+        <path class="wl w3"
+          stroke="rgba(100,160,255,.18)" stroke-width="4"
+          d="M-40,1200 Q68,1194 136,1200 Q204,1206 272,1200 Q340,1194 408,1200 Q476,1206 544,1200 Q612,1194 680,1200 Q748,1206 816,1200 Q884,1194 952,1200 Q1020,1206 1088,1200 Q1156,1194 1224,1200 Q1292,1206 1360,1200 Q1428,1194 1496,1200 Q1564,1206 1632,1200 Q1700,1194 1768,1200 Q1836,1206 1904,1200 Q1972,1194 2040,1200 Q2108,1206 2176,1200 Q2244,1194 2312,1200 Q2380,1206 2448,1200 Q2516,1194 2584,1200 Q2652,1206 2720,1200 Q2756,1198 2800,1200"/>
+
+        <!-- Near bottom (~y 1400) -->
+        <path class="wl w4"
+          stroke="rgba(100,160,255,.15)" stroke-width="4"
+          d="M-40,1400 Q54,1395 108,1400 Q162,1405 216,1400 Q270,1395 324,1400 Q378,1405 432,1400 Q486,1395 540,1400 Q594,1405 648,1400 Q702,1395 756,1400 Q810,1405 864,1400 Q918,1395 972,1400 Q1026,1405 1080,1400 Q1134,1395 1188,1400 Q1242,1405 1296,1400 Q1350,1395 1404,1400 Q1458,1405 1512,1400 Q1566,1395 1620,1400 Q1674,1405 1728,1400 Q1782,1395 1836,1400 Q1890,1405 1944,1400 Q1998,1395 2052,1400 Q2106,1405 2160,1400 Q2214,1395 2268,1400 Q2322,1405 2376,1400 Q2430,1395 2484,1400 Q2538,1405 2592,1400 Q2646,1395 2700,1400 Q2740,1398 2800,1400"/>
+
+        <!-- Channel between Hearth and Grove (~y 680 partial) -->
+        <path class="wl w1"
+          stroke="rgba(100,160,255,.16)" stroke-width="4"
+          d="M1090,680 Q1140,675 1190,680 Q1240,685 1290,680 Q1340,675 1390,680"
+          opacity=".7"/>
+
+        <!-- Channel top between Ember and Mist upper (~y 280) -->
+        <path class="wl w2"
+          stroke="rgba(100,160,255,.15)" stroke-width="4"
+          d="M830,280 Q930,275 1030,280 Q1130,285 1230,280 Q1330,275 1430,280 Q1530,285 1630,280"
+          opacity=".7"/>
+      </svg>
+
+      <!-- ════════════════════════════════════════════════════
+           ANIMATED ELEMENT OVERLAYS
+           Same viewBox as image (2752×1536) → scales with map.
+           Smoke uses SVG animateTransform (moves in SVG units,
+           so it stays proportional at any viewport size).
+           Opacity-only effects use CSS animation.
+      ═════════════════════════════════════════════════════ -->
+      <svg class="anim-svg" viewBox="0 0 2752 1536" preserveAspectRatio="none">
+
+        <!-- ── ① VOLCANO SMOKE — Ember Isle ─────────────────
+             Crater approx (420, 165). Three staggered smoke
+             puffs cycle through 5 discrete positions upward,
+             using SVG animateTransform so the rise distance
+             stays proportional as the map scales.           -->
+        <g transform="translate(420, 158)">
+          <!-- Puff A -->
+          <rect x="-7" y="0" width="14" height="12" fill="rgba(192,182,170,.88)">
+            <animateTransform attributeName="transform" type="translate"
+              dur="3s" begin="0s" repeatCount="indefinite" calcMode="discrete"
+              keyTimes="0;.2;.4;.6;.8;1"
+              values="-2,0; 1,-22; -3,-44; 2,-66; -1,-88; -2,0"/>
+            <animate attributeName="opacity" dur="3s" begin="0s"
+              repeatCount="indefinite" calcMode="discrete"
+              keyTimes="0;.2;.4;.6;.8;1"
+              values=".88;.65;.42;.2;.05;0"/>
+          </rect>
+          <!-- Puff B — offset by 1 s -->
+          <rect x="-5" y="0" width="12" height="10" fill="rgba(184,174,162,.82)">
+            <animateTransform attributeName="transform" type="translate"
+              dur="3s" begin="-1s" repeatCount="indefinite" calcMode="discrete"
+              keyTimes="0;.2;.4;.6;.8;1"
+              values="3,0; -2,-22; 4,-44; -1,-66; 3,-88; 3,0"/>
+            <animate attributeName="opacity" dur="3s" begin="-1s"
+              repeatCount="indefinite" calcMode="discrete"
+              keyTimes="0;.2;.4;.6;.8;1"
+              values=".82;.6;.38;.17;.04;0"/>
+          </rect>
+          <!-- Puff C — offset by 2 s -->
+          <rect x="-9" y="0" width="16" height="14" fill="rgba(178,168,156,.78)">
+            <animateTransform attributeName="transform" type="translate"
+              dur="3s" begin="-2s" repeatCount="indefinite" calcMode="discrete"
+              keyTimes="0;.2;.4;.6;.8;1"
+              values="-4,0; 3,-22; -2,-44; 4,-66; -3,-88; -4,0"/>
+            <animate attributeName="opacity" dur="3s" begin="-2s"
+              repeatCount="indefinite" calcMode="discrete"
+              keyTimes="0;.2;.4;.6;.8;1"
+              values=".78;.55;.34;.15;.03;0"/>
+          </rect>
+        </g>
+
+        <!-- ── ② TOWER FLAG — Mist Isle ─────────────────────
+             Tower top approx (2460, 148).
+             Two polygon frames alternate → pixel-sprite wave. -->
+        <g transform="translate(2460, 148)">
+          <polygon class="flag-f1" points="0,0 24,-11 0,-20" fill="#d03828"/>
+          <polygon class="flag-f2" points="0,0 24,-7  0,-20" fill="#d03828"/>
+        </g>
+
+        <!-- ── ③ LIGHTHOUSE BEACON — Tide Isle ──────────────
+             Light top approx (2392, 944).
+             Core pixel blinks; a faint beam sweeps NW.       -->
+        <g transform="translate(2392, 944)">
+          <rect class="bcn-core" x="-5" y="-5" width="10" height="10"
+                fill="#ffffc0"/>
+          <rect class="bcn-halo" x="-12" y="-12" width="24" height="24"
+                fill="rgba(255,255,160,.28)"/>
+          <line class="bcn-beam"
+                x1="0" y1="0" x2="-110" y2="-80"
+                stroke="rgba(255,255,180,.32)" stroke-width="9"
+                stroke-linecap="square"/>
+        </g>
+
+        <!-- ── ④ OCEAN SPARKLES — scattered twinkle pixels ──
+             Placed in open ocean areas between islands.       -->
+        <!-- upper gap (between Ember and Mist) -->
+        <rect class="sp sp1" x="628"  y="368"  width="6" height="6"/>
+        <rect class="sp sp2" x="1408" y="292"  width="6" height="6"/>
+        <!-- left ocean -->
+        <rect class="sp sp3" x="402"  y="1082" width="6" height="6"/>
+        <!-- lower-center ocean -->
+        <rect class="sp sp4" x="1612" y="1382" width="6" height="6"/>
+        <!-- right ocean (between Mist and Tide) -->
+        <rect class="sp sp5" x="2450" y="658"  width="6" height="6"/>
+        <!-- between Hearth and Grove -->
+        <rect class="sp sp6" x="1058" y="762"  width="6" height="6"/>
+        <!-- near boats -->
+        <rect class="sp sp7" x="442"  y="838"  width="4" height="4"/>
+        <rect class="sp sp8" x="1352" y="1288" width="4" height="4"/>
+
+      </svg>
+
+      <!-- HI rainbow arc overlay — same viewBox as image -->
+      <svg id="hiArcLayer" class="hi-arc-svg" viewBox="0 0 2752 1536" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="hiRainbow" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%"   stop-color="#FF4444"/>
+            <stop offset="17%"  stop-color="#FF8833"/>
+            <stop offset="34%"  stop-color="#FFDD22"/>
+            <stop offset="50%"  stop-color="#44CC44"/>
+            <stop offset="67%"  stop-color="#4488FF"/>
+            <stop offset="84%"  stop-color="#8844FF"/>
+            <stop offset="100%" stop-color="#CC44FF"/>
+          </linearGradient>
+        </defs>
+      </svg>
+
+      <!-- Float stage lives inside map-wrap so position:absolute
+           centres on the map image, not the full viewport -->
+      <div class="float-stage" id="floatStage"></div>
+
+    </div><!-- /map-wrap -->
+  </div><!-- /map-area -->
+
+  <!-- ── Bottom HUD ── -->
+  <div class="status-bar">
+    <!-- Primary: online count — most visible from across the room -->
+    <div class="hud-primary">
+      <span class="hud-primary-num" id="onlineCount">2</span>
+      <div class="hud-primary-meta">
+        <span class="hud-primary-label">ONLINE</span>
+      </div>
+    </div>
+
+    <!-- Secondary metrics -->
+    <div class="hud-secondary">
+      <div class="hud-metric">
+        <span class="hud-metric-val" id="connectCount">0</span>
+        <span class="hud-metric-label">CONNECTIONS</span>
+      </div>
+      <div class="hud-metric">
+        <span class="hud-metric-val" id="jumpCount">0</span>
+        <span class="hud-metric-label">RAINBOW BURSTS</span>
+      </div>
+    </div>
+
+    <div class="hud-spacer"></div>
+  </div>
+
+</div><!-- /page -->
+
+<!-- JUMP particle canvas (full-screen fixed overlay) -->
+<canvas id="jumpCanvas"></canvas>
+
+<!-- Admin mode toggle button (always visible, bottom-left) -->
+<button class="dev-toggle" id="devToggle">⚙ ADMIN</button>
+
+<!-- Dev overlay backdrop -->
+<div class="dev-overlay" id="devOverlay"></div>
+
+<!-- Dev floating panel -->
+<div class="dev-panel" id="devPanel">
+  <div class="dev-header">
+    <span class="dev-header-title">⚙ ADMIN 控场台</span>
+    <button class="dev-close" id="devClose">✕</button>
+  </div>
+  <div class="dev-body">
+
+    <!-- Row 1: Anonymous message -->
+    <div class="dev-row">
+      <span class="dev-row-label">SAY A</span>
+      <input class="dev-input" id="devMsgInput" type="text"
+             placeholder="ANONYMOUS MESSAGE..." maxlength="30" autocomplete="off">
+      <button class="dev-btn" id="devSayBtn">SEND</button>
+      <button class="dev-btn" id="devBurstBtn" title="send 5 messages at once">×5 BURST</button>
+    </div>
+
+    <div class="dev-divider"></div>
+
+    <!-- Row 2: Effects -->
+    <div class="dev-row">
+      <span class="dev-row-label">EFFECTS</span>
+      <button class="dev-btn jump" id="devJumpBtn">🌈 JUMP BURST</button>
+      <button class="dev-btn" id="devHiBtn">🌸 HI ARC</button>
+    </div>
+
+    <div class="dev-divider"></div>
+
+    <!-- Row 3: Phase 3 previews -->
+    <div class="dev-row">
+      <span class="dev-row-label">PHASE 3</span>
+      <button class="dev-btn p3" id="devDimBtn">🌑 DIM</button>
+      <button class="dev-btn p3" id="devRevealBtn">🗺 REVEAL MAP</button>
+      <button class="dev-btn p3" id="devPhotoBtn">📸 PHOTO</button>
+    </div>
+
+    <div class="dev-divider"></div>
+
+    <!-- Row 4: Online count simulation -->
+    <div class="dev-row">
+      <span class="dev-row-label">ONLINE</span>
+      <button class="dev-btn" id="devOnlineDec">−</button>
+      <span class="dev-count" id="devOnlineVal">2</span>
+      <button class="dev-btn" id="devOnlineInc">+</button>
+    </div>
+
+  </div>
 </div>
 
-<canvas id="hall"></canvas>
-
-<div id="empty">
-  <div class="glyph">✧</div>
-  <div class="hint">W A I T I N G · F O R · T H E · F I R S T</div>
+<!-- Chat panel — open by default, no input, receive-only -->
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-tab" id="chatTab"><span>CHAT<br/>ROOM</span></div>
+  <div class="chat-header"><span class="live-dot"></span>LIVE CHAT</div>
+  <div class="chat-log" id="chatLog"></div>
 </div>
-
-<div id="log"></div>
-<div id="vignette"></div>
-
-<div id="ach-overlay"></div>
-<div id="ach">
-  <div class="emoji"></div>
-  <div class="label">A C H I E V E M E N T</div>
-  <div class="title"></div>
-  <div class="who"></div>
-  <div class="desc"></div>
-</div>
-
-<div id="task-scroll">
-  <div class="scroll-ornament">── SCROLL ──</div>
-  <div class="task-who"></div>
-  <div class="task-title"></div>
-  <div class="task-desc"></div>
-  <div class="task-done">✅</div>
-  <div class="scroll-ornament">─────────</div>
-</div>
-
-<!-- 匿名告白墙 -->
-<div id="anon-wall"></div>
-
-<!-- 问答赛计分板 -->
-<div id="quiz-panel">
-  <div class="quiz-header">🎯 Quiz Time!</div>
-  <div class="quiz-question"></div>
-  <div class="quiz-timer"></div>
-  <div class="quiz-scores"></div>
-  <div class="quiz-status"></div>
-</div>
-
-<!-- Sprint 7: 技能融合 toast -->
-<div id="pair-toast">
-  <div class="pair-label">⇆  S K I L L   F U S I O N  ⇆</div>
-  <div class="pair-pair"></div>
-  <div class="pair-gained"></div>
-  <div class="pair-ult"></div>
-</div>
-
 <script>
-(() => {
-  "use strict";
+// ── Helpers ───────────────────────────────────────────────
+const pad = n => String(n).padStart(2,'0');
+function ts() {
+  const d = new Date();
+  return `[${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}]`;
+}
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function log(text, cls) {
+  const el = Object.assign(document.createElement('div'), { className: 'log-row' });
+  el.innerHTML = `<span class="log-ts">${ts()}</span><span class="log-body ${cls}">${esc(text)}</span>`;
+  const logEl = document.getElementById('chatLog');
+  logEl.appendChild(el);
+  logEl.scrollTop = logEl.scrollHeight;
+}
 
-  // ═══════════════════════════════════════════════════════
-  //  工 具
-  // ═══════════════════════════════════════════════════════
-  const $ = id => document.getElementById(id);
-  const canvas = $("hall");
-  const ctx = canvas.getContext("2d");
-  const PI = Math.PI, TAU = PI * 2;
+// ── Chat toggle ───────────────────────────────────────────
+const chatPanel = document.getElementById('chatPanel');
+const mapArea   = document.querySelector('.map-area');
+document.getElementById('chatTab').onclick = () => {
+  const nowClosed = chatPanel.classList.toggle('closed');
+  mapArea.classList.toggle('chat-closed', nowClosed);
+};
 
-  function hashStr(s) {
-    let h = 2166136261 >>> 0;
-    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
-    return h >>> 0;
-  }
-  function mulberry32(seed) {
-    return () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  }
-  function easeOutBack(x) { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); }
-  function easeOutQuart(x) { return 1 - Math.pow(1 - x, 4); }
-  const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]);
+// ── Admin panel (floating overlay) ───────────────────────
+// 公网默认隐藏 ADMIN 入口；host 加 ?admin=1 打开并填 token。
+// 安全模型：前端只缓存 token（localStorage），真正鉴权在服务端——
+// 每次 /admin/verify 与 /admin/stage 都带 X-Admin-Token 头由服务端重校（fail-closed）。
+// 控场动作（DIM/REVEAL/PHOTO）经服务端广播回所有页面，裸 URL 大屏也会同步。
+const ADMIN_ENABLED = new URLSearchParams(location.search).has('admin');
+const ADMIN_TOKEN_KEY = 'loiter_admin_token';
+let adminToken = null;
+const devToggleEl = document.getElementById('devToggle');
+devToggleEl.style.display = 'none';   // 默认隐藏，验证通过后才显示
 
-  function roundRect(x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
-  }
+async function verifyAdminToken(token) {
+  try {
+    const r = await fetch('/admin/verify', { method: 'POST', headers: { 'X-Admin-Token': token } });
+    return r.ok;
+  } catch (e) { return false; }
+}
 
-  // ═══════════════════════════════════════════════════════
-  //  常 量
-  // ═══════════════════════════════════════════════════════
-  const GOLD = "#b08830", GOLD_B = "#d4a840", CRIMSON = "#c04040";
-  const PURPLE = "#7c5cbf", TEAL = "#2a8a70";
-  const CHANNELS = ["main", "fishing", "help"];
-  const CHAN_COLORS = {
-    main:    { stroke: GOLD,   glow: "rgba(176,136,48,0.15)",  fill: "rgba(255,252,244,0.92)" },
-    fishing: { stroke: TEAL,   glow: "rgba(42,138,112,0.15)",  fill: "rgba(248,255,250,0.92)" },
-    help:    { stroke: PURPLE, glow: "rgba(124,92,191,0.15)",   fill: "rgba(252,248,255,0.92)" },
-  };
-  const chanColor = ch => CHAN_COLORS[ch] || CHAN_COLORS.main;
-
-  const RARITY = [
-    { min: 0,  tier: 0, border: "#a0a0a8", glow: "rgba(120,120,130,0.12)",   width: 1   },
-    { min: 5,  tier: 1, border: "#4a7fff", glow: "rgba(74,127,255,0.2)",     width: 1.5 },
-    { min: 15, tier: 2, border: "#9040e0", glow: "rgba(144,64,224,0.25)",    width: 2   },
-    { min: 30, tier: 3, border: GOLD,      glow: "rgba(176,136,48,0.3)",     width: 2.5 },
-  ];
-  function getRarity(n) {
-    for (let i = RARITY.length - 1; i >= 0; i--) { if ((n || 0) >= RARITY[i].min) return RARITY[i]; }
-    return RARITY[0];
-  }
-
-  const NPC_UID = "npc-vix";
-  const NPC_NICK = "Vix";
-
-  // ═══════════════════════════════════════════════════════
-  //  状 态
-  // ═══════════════════════════════════════════════════════
-  const members = new Map();
-  let totalMessages = 0;
-  let W = 0, H = 0;
-  let npcBubble = null;
-  let npcImg = null;
-  let achEffect = null;
-  const sakuraPetals = [];
-  const pollen = [];
-  const wisps = [];
-  const clouds = [];
-
-  // AI 生成背景图
-  let bgImg = null;
-  const bgImgEl = new Image();
-  bgImgEl.onload = () => { bgImg = bgImgEl; };
-  bgImgEl.src = "assets/bg_meadow.jpg";
-  const emoteEffects = [];
-  const joinBursts = [];
-
-  // ═══════════════════════════════════════════════════════
-  //  背 景 · 晨 光 山 水
-  // ═══════════════════════════════════════════════════════
-
-  // 云层初始化
-  for (let i = 0; i < 6; i++) {
-    const sz = 50 + Math.random() * 90;
-    const blobCount = 3 + Math.floor(Math.random() * 4);
-    const blobs = [];
-    for (let j = 0; j < blobCount; j++) {
-      blobs.push({
-        ox: (Math.random() - 0.5) * sz * 1.6,
-        oy: (Math.random() - 0.5) * sz * 0.35,
-        r: sz * (0.3 + Math.random() * 0.5),
-      });
-    }
-    clouds.push({
-      x: Math.random() * 1.4 - 0.2,
-      y: 0.04 + Math.random() * 0.28,
-      size: sz, blobs,
-      speed: 0.000006 + Math.random() * 0.000014,
-      alpha: 0.35 + Math.random() * 0.35,
+async function adminStage(action) {
+  if (!adminToken) { showAdminPrompt('请先填写 Admin token'); return; }
+  try {
+    const r = await fetch('/admin/stage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken },
+      body: JSON.stringify({ action }),
     });
-  }
+    if (r.status === 401 || r.status === 403) {
+      adminToken = null;
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+      showAdminPrompt('Token 失效，请重新填写');
+      return;
+    }
+    if (!r.ok) log(`⚠ stage ${action} failed (${r.status})`, 'log-conn');
+  } catch (e) { log(`⚠ stage ${action} network error`, 'log-conn'); }
+}
 
-  function drawSky() {
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0,   "#b8d6ea");
-    g.addColorStop(0.25,"#cad8e4");
-    g.addColorStop(0.5, "#e8dcc4");
-    g.addColorStop(0.75,"#d4e0c4");
-    g.addColorStop(1,   "#c0d0a8");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
+function showAdminPrompt(errMsg) {
+  if (document.getElementById('adminGate')) {
+    if (errMsg) document.getElementById('adminGateErr').textContent = errMsg;
+    return;
   }
-
-  // AI 背景 cover-fit 绘制
-  function drawBgCover() {
-    if (!bgImg) return false;
-    const imgR = bgImg.naturalWidth / bgImg.naturalHeight;
-    const canR = W / H;
-    let sx, sy, sw, sh;
-    if (canR > imgR) {
-      sw = bgImg.naturalWidth;
-      sh = sw / canR;
-      sx = 0;
-      sy = (bgImg.naturalHeight - sh) / 2;
+  const gate = document.createElement('div');
+  gate.id = 'adminGate';
+  gate.innerHTML = `
+    <style>
+      #adminGate{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;
+        background:rgba(6,8,16,.78);backdrop-filter:blur(8px);font-family:inherit;}
+      #adminGate .gate-card{width:min(360px,86vw);background:linear-gradient(160deg,#141a2e,#0d1120);
+        border:1px solid rgba(120,150,255,.25);border-radius:18px;padding:26px 24px 22px;
+        box-shadow:0 24px 70px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.03) inset;color:#e8ecff;text-align:center;}
+      #adminGate .gate-emoji{font-size:34px;line-height:1;margin-bottom:10px;}
+      #adminGate .gate-title{font-size:17px;font-weight:700;letter-spacing:.04em;margin-bottom:4px;}
+      #adminGate .gate-sub{font-size:12px;opacity:.6;margin-bottom:18px;}
+      #adminGate input{width:100%;box-sizing:border-box;padding:12px 14px;border-radius:11px;
+        border:1px solid rgba(120,150,255,.3);background:rgba(255,255,255,.04);color:#fff;font-size:15px;
+        letter-spacing:.06em;text-align:center;outline:none;transition:border-color .15s;}
+      #adminGate input:focus{border-color:rgba(140,170,255,.7);}
+      #adminGate .gate-btn{width:100%;margin-top:14px;padding:12px;border:0;border-radius:11px;cursor:pointer;
+        background:linear-gradient(135deg,#5b6cff,#8a5bff);color:#fff;font-size:14px;font-weight:700;
+        letter-spacing:.08em;transition:filter .15s,transform .05s;}
+      #adminGate .gate-btn:hover{filter:brightness(1.1);} #adminGate .gate-btn:active{transform:translateY(1px);}
+      #adminGate .gate-err{min-height:16px;margin-top:10px;font-size:12px;color:#ff7a7a;}
+      #adminGate .gate-cancel{margin-top:8px;font-size:11px;opacity:.45;cursor:pointer;}
+    </style>
+    <div class="gate-card">
+      <div class="gate-title">ADMIN 控场台</div>
+      <div class="gate-sub">输入口令以解锁导播控制</div>
+      <input id="adminGateInput" type="password" placeholder="• • • • • • • •" autocomplete="off" autofocus>
+      <button class="gate-btn" id="adminGateOk">解锁</button>
+      <div class="gate-err" id="adminGateErr">${errMsg ? esc(errMsg) : ''}</div>
+      <div class="gate-cancel" id="adminGateCancel">取消</div>
+    </div>`;
+  document.body.appendChild(gate);
+  const input = document.getElementById('adminGateInput');
+  const submit = async () => {
+    const t = input.value.trim();
+    if (!t) { document.getElementById('adminGateErr').textContent = '口令不能为空'; return; }
+    document.getElementById('adminGateErr').textContent = '验证中…';
+    if (await verifyAdminToken(t)) {
+      adminToken = t;
+      localStorage.setItem(ADMIN_TOKEN_KEY, t);
+      gate.remove();
+      devToggleEl.style.display = '';
+      openDev();
     } else {
-      sh = bgImg.naturalHeight;
-      sw = sh * canR;
-      sx = (bgImg.naturalWidth - sw) / 2;
-      sy = 0;
+      document.getElementById('adminGateErr').textContent = '口令错误';
+      input.select();
     }
-    ctx.drawImage(bgImg, sx, sy, sw, sh, 0, 0, W, H);
-    return true;
-  }
+  };
+  document.getElementById('adminGateOk').onclick = submit;
+  input.onkeydown = (e) => { if (e.key === 'Enter') submit(); };
+  document.getElementById('adminGateCancel').onclick = () => gate.remove();
+  setTimeout(() => input.focus(), 50);
+}
 
-  // 柔光光源（代替太阳，不画圆盘）
-  function drawSunGlow() {
-    const sx = W * 0.75, sy = H * 0.08;
-    ctx.save();
-    const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, H * 0.5);
-    g.addColorStop(0, "rgba(255,240,200,0.18)");
-    g.addColorStop(0.3, "rgba(255,230,180,0.08)");
-    g.addColorStop(1, "rgba(255,230,180,0)");
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(sx, sy, H * 0.5, 0, TAU); ctx.fill();
-    ctx.restore();
+async function initAdminGate() {
+  const saved = localStorage.getItem(ADMIN_TOKEN_KEY);
+  if (saved && await verifyAdminToken(saved)) {
+    adminToken = saved;
+    devToggleEl.style.display = '';
+    return;
   }
+  if (saved) localStorage.removeItem(ADMIN_TOKEN_KEY);
+  showAdminPrompt();
+}
 
-  function drawClouds(t) {
-    for (const c of clouds) {
-      c.x += c.speed;
-      if (c.x > 1.35) c.x = -0.35;
-      ctx.save();
-      ctx.globalAlpha = c.alpha;
-      for (const b of c.blobs) {
-        const bx = c.x * W + b.ox;
-        const by = c.y * H + b.oy + Math.sin(t * 0.0002 + b.ox * 0.01) * 3;
-        const br = b.r;
-        const g = ctx.createRadialGradient(bx, by, br * 0.1, bx, by, br);
-        g.addColorStop(0, "rgba(255,255,255,0.6)");
-        g.addColorStop(0.6, "rgba(255,255,255,0.25)");
-        g.addColorStop(1, "rgba(255,255,255,0)");
-        ctx.fillStyle = g;
-        ctx.beginPath(); ctx.arc(bx, by, br, 0, TAU); ctx.fill();
-      }
-      ctx.restore();
-    }
-  }
+if (ADMIN_ENABLED) initAdminGate();
+function openDev()  { document.getElementById('devPanel').classList.add('open');    document.getElementById('devOverlay').classList.add('open'); }
+function closeDev() { document.getElementById('devPanel').classList.remove('open'); document.getElementById('devOverlay').classList.remove('open'); }
+document.getElementById('devToggle').onclick = () =>
+  document.getElementById('devPanel').classList.contains('open') ? closeDev() : openDev();
+document.getElementById('devClose').onclick   = closeDev;
+document.getElementById('devOverlay').onclick = closeDev;
 
-  let mountainPaths = [];
-  function calcMountains() {
-    const layers = [
-      { base: 0.50, amp: 0.18, freq: 2.0, sub: 0.5, color: "rgba(160,155,185,0.25)" },  // 远山 · 薰衣草雾
-      { base: 0.62, amp: 0.12, freq: 3.2, sub: 0.3, color: "rgba(140,160,150,0.30)" },  // 中山 · 青灰
-      { base: 0.74, amp: 0.08, freq: 4.5, sub: 0.2, color: "rgba(120,148,120,0.28)" },  // 近山 · 淡翠
-    ];
-    mountainPaths = layers.map(l => {
-      const pts = [];
-      for (let x = 0; x <= W; x += 3) {
-        const nx = x / W;
-        const y = H * l.base
-          - Math.sin(nx * PI * l.freq) * H * l.amp
-          - Math.sin(nx * PI * l.freq * 2.7 + 1.3) * H * l.amp * l.sub
-          - Math.sin(nx * PI * l.freq * 0.6 + 4.1) * H * l.amp * 0.4;
-        pts.push({ x, y });
-      }
-      return { pts, color: l.color };
+// ── SAY fly-text system ───────────────────────────────────
+// 3 tracks near the top of the map; messages queue if all busy.
+const SAY_TRACKS = [
+  { y: '5%',  busy: false },
+  { y: '10%', busy: false },
+  { y: '15%', busy: false },
+];
+const sayQueue = [];
+
+function queueSAY(text) {
+  sayQueue.push(text);
+  _processSAY();
+}
+
+function _processSAY() {
+  if (!sayQueue.length) return;
+  const track = SAY_TRACKS.find(t => !t.busy);
+  if (!track) return;
+
+  track.busy = true;
+  const msg   = sayQueue.shift();
+  const mw    = document.querySelector('.map-wrap');
+
+  const el = document.createElement('div');
+  el.className   = 'say-track-msg';
+  el.textContent = `🌫️ Someone said: "${msg}"`;
+  el.style.top   = track.y;
+  el.style.transform = 'translateX(9999px)'; // offscreen until measured
+  mw.appendChild(el);
+
+  // After render: measure actual widths and start precise animation
+  requestAnimationFrame(() => {
+    const mapW  = mw.offsetWidth;
+    const txtW  = el.offsetWidth;
+    const speed = 160;                          // px / second
+    const dist  = mapW + txtW + 40;
+    const dur   = Math.round(dist / speed * 1000);
+
+    // Snap to start position (right edge of map, no chat overlap)
+    el.style.transition = 'none';
+    el.style.transform  = `translateX(${mapW + 20}px)`;
+
+    // Begin scroll on next frame
+    requestAnimationFrame(() => {
+      el.style.transition = `transform ${dur}ms linear`;
+      el.style.transform  = `translateX(${-(txtW + 20)}px)`;
     });
-  }
-  function drawMountains() {
-    for (const m of mountainPaths) {
-      ctx.fillStyle = m.color;
-      ctx.beginPath();
-      ctx.moveTo(0, H);
-      for (const p of m.pts) ctx.lineTo(p.x, p.y);
-      ctx.lineTo(W, H);
-      ctx.closePath();
-      ctx.fill();
-    }
-  }
 
-  // 地面柔雾（草坪过渡）
-  function drawGroundMist(t) {
-    const fogH = H * 0.22;
-    const fogY = H - fogH;
-    ctx.save();
-    // 浅绿雾气
-    const g = ctx.createLinearGradient(0, fogY, 0, H);
-    g.addColorStop(0, "rgba(180,200,160,0)");
-    g.addColorStop(0.5, "rgba(180,200,160,0.06)");
-    g.addColorStop(1, "rgba(160,185,140,0.12)");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, fogY, W, fogH);
-    ctx.restore();
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  粒 子 · 樱 花（明亮粉色）
-  // ═══════════════════════════════════════════════════════
-  const SAKURA_COLORS = [
-    "rgba(255,180,195,0.75)",
-    "rgba(255,200,215,0.55)",
-    "rgba(255,160,180,0.65)",
-    "rgba(255,225,235,0.45)",
-  ];
-  function spawnSakura() {
-    if (sakuraPetals.length > 40) return;
-    sakuraPetals.push({
-      x: Math.random() * W * 1.2 - W * 0.1,
-      y: -10 - Math.random() * 40,
-      vx: 0.2 + Math.random() * 0.5,
-      vy: 0.3 + Math.random() * 0.6,
-      rot: Math.random() * TAU,
-      rotSpd: (Math.random() - 0.5) * 0.03,
-      size: 3 + Math.random() * 5,
-      color: SAKURA_COLORS[Math.floor(Math.random() * SAKURA_COLORS.length)],
-      wobblePhase: Math.random() * TAU,
-      wobbleAmp: 0.3 + Math.random() * 0.8,
-    });
-  }
-  function updateAndDrawSakura(t) {
-    for (let i = sakuraPetals.length - 1; i >= 0; i--) {
-      const p = sakuraPetals[i];
-      p.x += p.vx + Math.sin(t * 0.001 + p.wobblePhase) * p.wobbleAmp;
-      p.y += p.vy;
-      p.rot += p.rotSpd;
-      if (p.y > H + 20 || p.x > W + 40) { sakuraPetals.splice(i, 1); continue; }
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate(p.rot);
-      ctx.globalAlpha = 0.75;
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.moveTo(0, -p.size);
-      ctx.quadraticCurveTo(p.size * 0.7, -p.size * 0.2, 0, p.size * 0.8);
-      ctx.quadraticCurveTo(-p.size * 0.7, -p.size * 0.2, 0, -p.size);
-      ctx.fill();
-      ctx.restore();
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  粒 子 · 金色花粉（代替萤火虫）
-  // ═══════════════════════════════════════════════════════
-  function initPollen() {
-    for (let i = 0; i < 18; i++) {
-      pollen.push({
-        x: Math.random() * W,
-        y: H * 0.25 + Math.random() * H * 0.65,
-        vx: (Math.random() - 0.5) * 0.2,
-        vy: -0.03 - Math.random() * 0.08,
-        size: 1 + Math.random() * 2.5,
-        phase: Math.random() * TAU,
-        speed: 0.001 + Math.random() * 0.002,
-        hue: 38 + Math.random() * 20,
-      });
-    }
-  }
-  function drawPollen(t) {
-    for (const p of pollen) {
-      p.x += p.vx + Math.sin(t * 0.0005 + p.phase) * 0.15;
-      p.y += p.vy + Math.cos(t * 0.0004 + p.phase * 1.3) * 0.1;
-      if (p.y < -20) { p.y = H + 10; p.x = Math.random() * W; }
-      if (p.x < -20) p.x = W + 20;
-      if (p.x > W + 20) p.x = -20;
-      p.vx *= 0.999; p.vy *= 0.999;
-      const pulse = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * p.speed + p.phase));
-      ctx.save();
-      // 柔光晕
-      ctx.globalAlpha = pulse * 0.25;
-      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * 5);
-      g.addColorStop(0, `hsla(${p.hue},70%,65%,0.4)`);
-      g.addColorStop(1, `hsla(${p.hue},70%,65%,0)`);
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.size * 5, 0, TAU); ctx.fill();
-      // 核心
-      ctx.globalAlpha = pulse * 0.7;
-      ctx.fillStyle = `hsl(${p.hue},65%,72%)`;
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.size * 0.6, 0, TAU); ctx.fill();
-      ctx.restore();
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  粒 子 · 白色薄雾
-  // ═══════════════════════════════════════════════════════
-  function initWisps() {
-    for (let i = 0; i < 5; i++) {
-      wisps.push({
-        x: Math.random() * W,
-        y: H * 0.25 + Math.random() * H * 0.45,
-        size: 60 + Math.random() * 120,
-        speed: 0.04 + Math.random() * 0.1,
-        phase: Math.random() * TAU,
-        alpha: 0.03 + Math.random() * 0.04,
-      });
-    }
-  }
-  function drawWisps(t) {
-    for (const w of wisps) {
-      w.x += w.speed;
-      if (w.x > W + w.size * 2) w.x = -w.size * 2;
-      const y = w.y + Math.sin(t * 0.0002 + w.phase) * 12;
-      ctx.save();
-      ctx.globalAlpha = w.alpha;
-      const g = ctx.createRadialGradient(w.x, y, 0, w.x, y, w.size);
-      g.addColorStop(0, "rgba(255,255,255,0.4)");
-      g.addColorStop(0.5, "rgba(255,255,255,0.15)");
-      g.addColorStop(1, "rgba(255,255,255,0)");
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(w.x, y, w.size, 0, TAU); ctx.fill();
-      ctx.restore();
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  头 像 · identicon（Q版可爱圆脸）
-  // ═══════════════════════════════════════════════════════
-  function makeAvatar(uid) {
-    const seed = hashStr(uid);
-    const rnd = mulberry32(seed);
-    const hue = Math.floor(rnd() * 360);
-    const color = `hsl(${hue}, 70%, 58%)`;
-    const glow = `hsl(${hue}, 80%, 65%)`;
-    const grid = [];
-    for (let y = 0; y < 5; y++) {
-      const row = [0, 0, 0, 0, 0];
-      for (let x = 0; x < 3; x++) { const on = rnd() > 0.45 ? 1 : 0; row[x] = on; row[4 - x] = on; }
-      grid.push(row);
-    }
-    return { grid, color, glow, hue };
-  }
-
-  function drawIdenticon(av, cx, cy, cellSize, alpha) {
-    const r = cellSize * 2.8;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    // 圆形底色
-    const g = ctx.createRadialGradient(cx - r * 0.2, cy - r * 0.2, 0, cx, cy, r);
-    g.addColorStop(0, `hsl(${av.hue}, 55%, 72%)`);
-    g.addColorStop(1, `hsl(${av.hue}, 50%, 55%)`);
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
-    // 眼睛
-    ctx.fillStyle = "#fff";
-    const eyeY = cy - r * 0.12, eyeSpan = r * 0.28, eyeR = r * 0.15;
-    ctx.beginPath(); ctx.arc(cx - eyeSpan, eyeY, eyeR, 0, TAU); ctx.fill();
-    ctx.beginPath(); ctx.arc(cx + eyeSpan, eyeY, eyeR, 0, TAU); ctx.fill();
-    // 瞳孔
-    ctx.fillStyle = "#2a2a3a";
-    const pupilR = eyeR * 0.55;
-    ctx.beginPath(); ctx.arc(cx - eyeSpan + 1, eyeY + 1, pupilR, 0, TAU); ctx.fill();
-    ctx.beginPath(); ctx.arc(cx + eyeSpan + 1, eyeY + 1, pupilR, 0, TAU); ctx.fill();
-    // 高光
-    ctx.fillStyle = "#fff";
-    const hlR = pupilR * 0.4;
-    ctx.beginPath(); ctx.arc(cx - eyeSpan - 1, eyeY - 1, hlR, 0, TAU); ctx.fill();
-    ctx.beginPath(); ctx.arc(cx + eyeSpan - 1, eyeY - 1, hlR, 0, TAU); ctx.fill();
-    // 微笑
-    ctx.strokeStyle = "#2a2a3a";
-    ctx.lineWidth = r * 0.06;
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.arc(cx, cy + r * 0.05, r * 0.28, PI * 0.15, PI * 0.85);
-    ctx.stroke();
-    // 腮红
-    ctx.globalAlpha = alpha * 0.25;
-    ctx.fillStyle = `hsl(${(av.hue + 330) % 360}, 70%, 65%)`;
-    ctx.beginPath(); ctx.arc(cx - r * 0.5, cy + r * 0.15, r * 0.15, 0, TAU); ctx.fill();
-    ctx.beginPath(); ctx.arc(cx + r * 0.5, cy + r * 0.15, r * 0.15, 0, TAU); ctx.fill();
-    ctx.restore();
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  入 场 金 光 爆 发
-  // ═══════════════════════════════════════════════════════
-  function spawnJoinBurst(cx, cy) {
-    const burst = { x: cx, y: cy, start: performance.now(), particles: [] };
-    for (let i = 0; i < 24; i++) {
-      const a = (i / 24) * TAU + (Math.random() - 0.5) * 0.3;
-      const spd = 1.5 + Math.random() * 3;
-      burst.particles.push({
-        x: cx, y: cy,
-        vx: Math.cos(a) * spd, vy: Math.sin(a) * spd,
-        size: 1.5 + Math.random() * 3,
-        life: 1, decay: 0.01 + Math.random() * 0.008,
-        hue: 38 + Math.random() * 15,
-      });
-    }
-    joinBursts.push(burst);
-  }
-
-  function drawJoinBursts(t) {
-    for (let bi = joinBursts.length - 1; bi >= 0; bi--) {
-      const b = joinBursts[bi];
-      const age = performance.now() - b.start;
-      let alive = false;
-      if (age < 600) {
-        const k = 1 - age / 600;
-        ctx.save();
-        ctx.globalAlpha = k * 0.3;
-        const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, 60 * (1 - k * 0.5));
-        g.addColorStop(0, "rgba(240,214,138,0.5)");
-        g.addColorStop(1, "rgba(240,214,138,0)");
-        ctx.fillStyle = g;
-        ctx.beginPath(); ctx.arc(b.x, b.y, 60, 0, TAU); ctx.fill();
-        ctx.restore();
-        alive = true;
-      }
-      for (let i = b.particles.length - 1; i >= 0; i--) {
-        const p = b.particles[i];
-        p.x += p.vx; p.y += p.vy;
-        p.vx *= 0.97; p.vy *= 0.97;
-        p.life -= p.decay;
-        if (p.life <= 0) { b.particles.splice(i, 1); continue; }
-        alive = true;
-        ctx.save();
-        ctx.globalAlpha = p.life * 0.7;
-        ctx.fillStyle = `hsl(${p.hue},75%,62%)`;
-        ctx.shadowColor = `hsla(${p.hue},85%,68%,0.5)`;
-        ctx.shadowBlur = 5;
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.size * p.life, 0, TAU); ctx.fill();
-        ctx.restore();
-      }
-      if (!alive) joinBursts.splice(bi, 1);
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  角 色 展 示
-  // ═══════════════════════════════════════════════════════
-  function spawnNode(uid, nick) {
-    const seed = hashStr(uid);
-    const rnd = mulberry32(seed ^ 0x9e3779b9);
-    const node = {
-      uid, nick: nick || uid.slice(0, 6),
-      av: makeAvatar(uid),
-      x: 60 + rnd() * Math.max(1, W - 120),
-      y: 50 + rnd() * Math.max(1, H - 120),
-      phase: rnd() * TAU,
-      speed: 0.12 + rnd() * 0.2,
-      drift: 14 + rnd() * 20,
-      born: performance.now(),
-      leaving: 0,
-      bubble: null,
-      pop: 0,
-      channel: "main",
-      msgCount: 0,
-      img: null,
-      tiltDx: 0, tiltDy: 0,
-      lastTilt: 0,
-      generating: false,
-      // Sprint 7: 技能融合状态
-      skills: [],                  // 已拥有 skill 名（按 element 内顺序）
-      progress: [0, 16],           // [collected, total]
-      starterSkills: [],           // A+ 改进: 入场冻结的 2 个 starter（永远不变）
-      contributedCount: 0,         // 贡献排行: 我给了多少人 starter skill
-      ultimates: [],               // 已解锁系（nature/fire/water/light）
-      hasOmni: false,
-      pairingUntil: 0,             // /pair 求偶模式截止时刻（performance.now()），0=未求偶
-      fusion: null,                // 融合演出状态机：{phase, start, partnerUid, partnerX, partnerY, gained:[]}
-    };
-    members.set(uid, node);
-    return node;
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  Sprint 7 — Skill Fusion: 常量 + 渲染辅助
-  // ═══════════════════════════════════════════════════════
-  const SKILLS_BY_ELEMENT = {
-    nature: ["bloom", "wind", "rain", "leaf"],
-    fire:   ["spark", "fox", "flame", "comet"],
-    water:  ["wave", "bubble", "mist", "tide"],
-    light:  ["star", "aurora", "lightning", "halo"],
-  };
-  const ELEMENT_COLOR = {
-    nature: "#7ab06a",   // sage green
-    fire:   "#d97746",   // ember orange
-    water:  "#5a9bc4",   // dusk blue
-    light:  "#d9b246",   // pollen gold
-  };
-  // skill -> emoji（用于 chip 行 + fusion 飞图标 + toast）
-  const SKILL_EMOJI = {
-    bloom: "🌸", wind: "🍃", rain: "🌈", leaf: "🍂",
-    spark: "✨", fox: "🦊", flame: "🔥", comet: "☄️",
-    wave: "🌊", bubble: "🫧", mist: "🌫️", tide: "💧",
-    star: "⭐", aurora: "🌌", lightning: "⚡", halo: "💫",
-  };
-  // skill -> element (反查)
-  const SKILL_TO_ELEMENT = (() => {
-    const o = {};
-    for (const [el, ss] of Object.entries(SKILLS_BY_ELEMENT)) for (const s of ss) o[s] = el;
-    return o;
-  })();
-  const PAIR_WINDOW_MS = 3000;        // 与服务端 PAIRING_WINDOW_S 对齐
-  const FUSION_TOTAL_MS = 5000;       // 5s 融合演出时长
-  const FUSION_APPROACH_MS = 1500;    // 0-1500ms 相向移动
-  const FUSION_HOLD_MS = 500;         // 1500-2000ms 站位重合 + 光柱
-  const FUSION_BURST_MS = 1500;       // 2000-3500ms 技能图标飞出
-  const FUSION_RELEASE_MS = 1500;     // 3500-5000ms 渐回自由
-
-  // 角色脚下绘制 skill chips（16 格 × 4 行 1 列 layout）
-  function drawSkillChips(n, cx, cy, scale, alpha) {
-    const collected = (n.progress && n.progress[1]) ? n.progress[0] : (n.skills ? n.skills.length : 0);
-    if (collected === 0 && (!n.skills || n.skills.length === 0)) return;
-    const size = CHAR_SIZE * scale;
-    const chipSize = Math.max(7, 9 * scale);
-    const gap = 2 * scale;
-    // 每系一行 4 chip，4 系 4 行 → 太占空间。改 horizontal strip：一行 4 系×4 chip，按 element 分组
-    const elements = ["nature", "fire", "water", "light"];
-    const ownedSet = new Set(n.skills || []);
-    const totalWidth = 4 * (4 * chipSize + 3 * gap) + 3 * (gap * 2);
-    const startX = cx - totalWidth / 2;
-    const baseY = cy + size * 0.5 + Math.max(18, 22 * scale);
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    let x = startX;
-    for (const el of elements) {
-      const col = ELEMENT_COLOR[el];
-      for (const sk of SKILLS_BY_ELEMENT[el]) {
-        const owned = ownedSet.has(sk);
-        ctx.fillStyle = owned ? col : "rgba(120,110,100,0.25)";
-        ctx.beginPath();
-        if (ctx.roundRect) ctx.roundRect(x, baseY, chipSize, chipSize, 2);
-        else ctx.rect(x, baseY, chipSize, chipSize);
-        ctx.fill();
-        if (owned) {
-          ctx.strokeStyle = "rgba(255,255,255,0.55)";
-          ctx.lineWidth = 0.8;
-          ctx.stroke();
-        }
-        x += chipSize + gap;
-      }
-      x += gap * 2;
-    }
-    // 进度数字 (e.g. "7/16")
-    ctx.fillStyle = "rgba(90,74,56,0.85)";
-    ctx.font = `bold ${Math.max(9, 11 * scale)}px var(--font-body, sans-serif)`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    let progStr = `${collected}/16` + (n.hasOmni ? " ✦" : (n.ultimates && n.ultimates.length ? " ⚡" : ""));
-    // A+ 改进: 贡献排行徽章 📨 N（横在进度数字旁）
-    if (n.contributedCount && n.contributedCount > 0) {
-      progStr += `   📨${n.contributedCount}`;
-    }
-    ctx.fillText(progStr, cx, baseY + chipSize + 3);
-    ctx.restore();
-  }
-
-  // A+ 改进: omni 玩家头顶 👑 KING 皇冠（金色脉动）
-  function drawKingCrown(n, cx, cy, scale, alpha, t) {
-    if (!n.hasOmni) return;
-    const size = CHAR_SIZE * scale;
-    const pulse = 0.7 + 0.3 * Math.sin(t * 0.005);
-    ctx.save();
-    ctx.globalAlpha = alpha * pulse;
-    ctx.font = `${Math.max(22, 28 * scale)}px sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "bottom";
-    // 金色光晕
-    ctx.shadowColor = "rgba(255,200,80,0.85)";
-    ctx.shadowBlur = 12 * pulse;
-    ctx.fillText("👑", cx, cy - size * 0.55);
-    ctx.restore();
-  }
-
-  // /pair 求偶模式 — 脉动粉色心圈 + 头顶 ❤️
-  function drawPairAura(n, cx, cy, scale, alpha, t) {
-    if (!n.pairingUntil || performance.now() > n.pairingUntil) return;
-    const size = CHAR_SIZE * scale;
-    const left = (n.pairingUntil - performance.now()) / PAIR_WINDOW_MS;
-    const pulse = 0.5 + 0.5 * Math.sin(t * 0.012);
-    ctx.save();
-    ctx.globalAlpha = alpha * (0.35 + 0.4 * pulse) * Math.min(1, left * 2);
-    // 心圈
-    ctx.strokeStyle = "#ff6fb5";
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.arc(cx, cy, size * (0.55 + 0.08 * pulse), 0, TAU);
-    ctx.stroke();
-    // 内圈
-    ctx.globalAlpha = alpha * 0.25 * Math.min(1, left * 2);
-    ctx.strokeStyle = "#ffb6e0";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(cx, cy, size * (0.48 + 0.04 * pulse), 0, TAU);
-    ctx.stroke();
-    ctx.restore();
-    // 头顶 ❤️
-    ctx.save();
-    ctx.globalAlpha = alpha * (0.7 + 0.3 * pulse) * Math.min(1, left * 2);
-    ctx.font = `${Math.max(20, 24 * scale)}px sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "bottom";
-    ctx.fillText("💗", cx, cy - size * 0.55);
-    ctx.restore();
-  }
-
-  const CHAR_SIZE = 80;
-
-  function drawCharacter(n, cx, cy, scale, alpha, t) {
-    const size = CHAR_SIZE * scale;
-    const r = getRarity(n.msgCount);
-    const cc = chanColor(n.channel);
-
-    ctx.save();
-    ctx.globalAlpha = alpha;
-
-    // ── 脚下阴影 ──
-    ctx.save();
-    ctx.globalAlpha = alpha * 0.12;
-    ctx.fillStyle = "rgba(60,50,40,0.4)";
-    ctx.beginPath();
-    ctx.ellipse(cx, cy + size * 0.48, size * 0.32, size * 0.08, 0, 0, TAU);
-    ctx.fill();
-    ctx.restore();
-
-    // ── SSR 旋转光芒 ──
-    if (r.tier === 3) {
-      ctx.save();
-      ctx.globalAlpha = alpha * 0.12;
-      const rayCount = 10;
-      const rayLen = size * 0.9;
-      ctx.translate(cx, cy);
-      ctx.rotate(t * 0.0003);
-      for (let i = 0; i < rayCount; i++) {
-        const a = (i / rayCount) * TAU;
-        const hue = (38 + i * 8) % 60;
-        ctx.fillStyle = `hsl(${hue}, 65%, 58%)`;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(Math.cos(a - 0.05) * rayLen, Math.sin(a - 0.05) * rayLen);
-        ctx.lineTo(Math.cos(a + 0.05) * rayLen, Math.sin(a + 0.05) * rayLen);
-        ctx.closePath();
-        ctx.fill();
-      }
-      ctx.restore();
-    }
-
-    // ── 稀有度光环 ──
-    if (r.tier >= 1) {
-      ctx.save();
-      const glowR = size * 0.55;
-      ctx.globalAlpha = alpha * (r.tier === 3 ? 0.2 : r.tier === 2 ? 0.15 : 0.08);
-      let glowColor;
-      if (r.tier === 3) {
-        const hue = (t * 0.04) % 360;
-        glowColor = `hsla(${hue}, 65%, 55%, 0.4)`;
-      } else {
-        glowColor = r.glow;
-      }
-      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
-      g.addColorStop(0, glowColor);
-      g.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(cx, cy, glowR, 0, TAU); ctx.fill();
-      ctx.restore();
-    }
-
-    // ── SR 粒子飘散 ──
-    if (r.tier === 2 && Math.random() < 0.12) {
-      const angle = Math.random() * TAU;
-      const dist = size * 0.4;
-      sakuraPetals.push({
-        x: cx + Math.cos(angle) * dist,
-        y: cy + Math.sin(angle) * dist,
-        vx: Math.cos(angle) * 0.3,
-        vy: -0.3 - Math.random() * 0.3,
-        rot: Math.random() * TAU,
-        rotSpd: (Math.random() - 0.5) * 0.02,
-        size: 2 + Math.random() * 2,
-        color: "rgba(144,64,224,0.4)",
-        wobblePhase: Math.random() * TAU,
-        wobbleAmp: 0.2,
-      });
-    }
-
-    // ── 角色图像 ──
-    const imgX = cx - size / 2, imgY = cy - size / 2;
-    if (n.img && n.img.complete && n.img.naturalWidth) {
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.drawImage(n.img, imgX, imgY, size, size);
-      ctx.restore();
-    } else {
-      drawIdenticon(n.av, cx, cy, size / 6, alpha);
-    }
-
-    // ── 昵称 ──
-    ctx.save();
-    ctx.globalAlpha = alpha * 0.9;
-    ctx.fillStyle = "#5a4a38";
-    ctx.shadowColor = "rgba(255,250,240,0.8)";
-    ctx.shadowBlur = 3;
-    ctx.font = `bold ${Math.max(11, 13 * scale)}px "Noto Serif SC", serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    const nick = n.nick.length > 6 ? n.nick.slice(0, 6) : n.nick;
-    ctx.fillText(nick, cx, cy + size * 0.5 + 4 * scale);
-    ctx.restore();
-
-    // ── 频道色标 ──
-    if (n.channel && n.channel !== "main") {
-      ctx.save();
-      ctx.globalAlpha = alpha * 0.6;
-      ctx.fillStyle = cc.stroke;
-      ctx.beginPath();
-      ctx.arc(cx + size * 0.38, cy - size * 0.38, 4, 0, TAU);
-      ctx.fill();
-      ctx.restore();
-    }
-
-    // ── 头像生成中旋转指示器 ──
-    if (n.generating) {
-      ctx.save();
-      ctx.globalAlpha = alpha * 0.7;
-      ctx.strokeStyle = GOLD;
-      ctx.lineWidth = 2;
-      const spinR = size * 0.42;
-      const spinAngle = t * 0.003;
-      ctx.beginPath();
-      ctx.arc(cx, cy - size * 0.1, spinR, spinAngle, spinAngle + PI * 1.2);
-      ctx.stroke();
-      const dotA = spinAngle + PI * 1.2;
-      ctx.fillStyle = GOLD_B;
-      ctx.beginPath();
-      ctx.arc(cx + Math.cos(dotA) * spinR, cy - size * 0.1 + Math.sin(dotA) * spinR, 3, 0, TAU);
-      ctx.fill();
-      ctx.fillStyle = "#5a4a38";
-      ctx.font = '11px "Noto Serif SC", serif';
-      ctx.textAlign = "center";
-      ctx.fillText("generating...", cx, cy - size * 0.55);
-      ctx.restore();
-    }
-
-    ctx.restore();
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  气 泡（明亮主题）
-  // ═══════════════════════════════════════════════════════
-  function drawBubble(text, cx, cy, alpha, channel) {
-    const cc = chanColor(channel);
-    const tag = (channel && channel !== "main") ? "#" + channel + " " : "";
-    const body = text.length > 80 ? text.slice(0, 79) + "…" : text;
-    const full = tag + body;
-    ctx.save();
-    ctx.font = '13px "Noto Serif SC", serif';
-
-    const maxW = 280;
-    const lines = [];
-    let line = "";
-    for (const ch of full) {
-      const test = line + ch;
-      if (ctx.measureText(test).width > maxW && line) {
-        lines.push(line);
-        line = ch;
-      } else {
-        line = test;
-      }
-    }
-    if (line) lines.push(line);
-    if (lines.length > 3) { lines.length = 3; lines[2] = lines[2].slice(0, -1) + "…"; }
-
-    const lineH = 18;
-    const padX = 12, padY = 8;
-    const widest = Math.max(...lines.map(l => ctx.measureText(l).width));
-    const w = widest + padX * 2;
-    const h = lines.length * lineH + padY * 2;
-    const x = cx - w / 2, y = cy - h;
-
-    ctx.globalAlpha = alpha * 0.94;
-    ctx.fillStyle = cc.fill;
-    ctx.strokeStyle = cc.stroke;
-    ctx.lineWidth = 0.8;
-    ctx.shadowColor = "rgba(100,80,50,0.08)";
-    ctx.shadowBlur = 8;
-    ctx.shadowOffsetY = 2;
-    roundRect(x, y, w, h, 8);
-    ctx.fill();
-    ctx.shadowColor = "transparent";
-    ctx.globalAlpha = alpha * 0.35;
-    ctx.stroke();
-    ctx.globalAlpha = alpha * 0.94;
-
-    // 小尾巴
-    ctx.fillStyle = cc.fill;
-    ctx.beginPath();
-    ctx.moveTo(cx - 5, y + h);
-    ctx.lineTo(cx + 5, y + h);
-    ctx.lineTo(cx, y + h + 6);
-    ctx.closePath();
-    ctx.fill();
-
-    // 文字
-    ctx.fillStyle = "#3a3530";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    for (let i = 0; i < lines.length; i++) {
-      ctx.fillText(lines[i], cx, y + padY + i * lineH + lineH / 2);
-    }
-    ctx.restore();
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  NPC 月灵 — 漂浮仙灵
-  // ═══════════════════════════════════════════════════════
-  let npcAwake = false;
-  let npcAwakeUntil = 0;
-
-  // 月灵固定悬浮位置（右上区域）
-  const NPC_BASE_X_RATIO = 0.82;
-  const NPC_BASE_Y_RATIO = 0.14;
-
-  function getNpcPos(t) {
-    const bx = W * NPC_BASE_X_RATIO;
-    const by = H * NPC_BASE_Y_RATIO;
-    const bob = Math.sin(t * 0.0008) * 10;
-    const sway = Math.cos(t * 0.0006) * 6;
-    return { x: bx + sway, y: by + bob };
-  }
-
-  function drawNpc(t) {
-    const { x: nx, y: ny } = getNpcPos(t);
-    const now = performance.now();
-
-    if (npcAwakeUntil && now > npcAwakeUntil) { npcAwake = false; npcAwakeUntil = 0; }
-
-    const baseR = npcImg ? 28 : 18;
-    const pulse = 0.5 + 0.5 * Math.sin(t * 0.002);
-    const awakeBoost = npcAwake ? 1.0 : 0.0;
-
-    ctx.save();
-
-    // ── 外层柔光晕 ──
-    const glowR = baseR * (3 + awakeBoost * 1.5);
-    ctx.globalAlpha = 0.12 + awakeBoost * 0.1 + pulse * 0.03;
-    const g0 = ctx.createRadialGradient(nx, ny, 0, nx, ny, glowR);
-    g0.addColorStop(0, "rgba(255,235,180,0.5)");
-    g0.addColorStop(0.4, "rgba(255,225,160,0.15)");
-    g0.addColorStop(1, "rgba(255,225,160,0)");
-    ctx.fillStyle = g0;
-    ctx.beginPath(); ctx.arc(nx, ny, glowR, 0, TAU); ctx.fill();
-
-    // ── 内层光晕 ──
-    ctx.globalAlpha = 0.2 + awakeBoost * 0.15;
-    const g1 = ctx.createRadialGradient(nx, ny, baseR * 0.3, nx, ny, baseR * 1.8);
-    g1.addColorStop(0, "rgba(255,240,200,0.4)");
-    g1.addColorStop(1, "rgba(255,240,200,0)");
-    ctx.fillStyle = g1;
-    ctx.beginPath(); ctx.arc(nx, ny, baseR * 1.8, 0, TAU); ctx.fill();
-
-    // ── NPC 图像 或 光球核心 ──
-    if (npcImg && npcImg.complete && npcImg.naturalWidth) {
-      // 有 AI 生成头像：显示为圆形裁切的 Q 版精灵
-      ctx.globalAlpha = 0.95;
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(nx, ny, baseR, 0, TAU);
-      ctx.clip();
-      ctx.drawImage(npcImg, nx - baseR, ny - baseR, baseR * 2, baseR * 2);
-      ctx.restore();
-      // 光环边框
-      ctx.globalAlpha = 0.4 + awakeBoost * 0.3;
-      ctx.strokeStyle = "rgba(255,230,160,0.6)";
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.arc(nx, ny, baseR + 1, 0, TAU); ctx.stroke();
-    } else {
-      // 无图像：画光球
-      ctx.globalAlpha = 0.9;
-      const cg = ctx.createRadialGradient(nx - baseR * 0.2, ny - baseR * 0.2, 0, nx, ny, baseR);
-      cg.addColorStop(0, "#fff8e8");
-      cg.addColorStop(0.4, "#f5e0a0");
-      cg.addColorStop(1, "#d4a854");
-      ctx.fillStyle = cg;
-      ctx.beginPath(); ctx.arc(nx, ny, baseR, 0, TAU); ctx.fill();
-    }
-
-    // ── 觉醒态：附加特效 ──
-    if (npcAwake) {
-      // 旋转光环
-      ctx.globalAlpha = 0.2 + pulse * 0.1;
-      ctx.strokeStyle = "rgba(255,220,140,0.5)";
-      ctx.lineWidth = 1;
-      const orbR = baseR + 8;
-      const orbAngle = t * 0.001;
-      ctx.beginPath();
-      ctx.arc(nx, ny, orbR, orbAngle, orbAngle + PI * 1.5);
-      ctx.stroke();
-
-      // 3 颗环绕光点
-      for (let i = 0; i < 3; i++) {
-        const a = orbAngle + (i / 3) * TAU;
-        const ox = nx + Math.cos(a) * orbR;
-        const oy = ny + Math.sin(a) * orbR;
-        ctx.globalAlpha = 0.5 + pulse * 0.3;
-        ctx.fillStyle = "#ffe8a0";
-        ctx.beginPath(); ctx.arc(ox, oy, 2, 0, TAU); ctx.fill();
-      }
-    }
-
-    // ── 名字 ──
-    ctx.globalAlpha = 0.55 + awakeBoost * 0.3;
-    ctx.fillStyle = "#8a7a58";
-    ctx.shadowColor = "rgba(255,250,240,0.8)";
-    ctx.shadowBlur = 3;
-    ctx.font = '12px "Noto Serif SC", serif';
-    ctx.textAlign = "center";
-    ctx.fillText(NPC_NICK, nx, ny + baseR + 16);
-    ctx.restore();
-
-    // ── 仙灵尾迹粒子 ──
-    if (Math.random() < (npcAwake ? 0.25 : 0.08)) {
-      pollen.push({
-        x: nx + (Math.random() - 0.5) * 20,
-        y: ny + (Math.random() - 0.5) * 20,
-        vx: (Math.random() - 0.5) * 0.3,
-        vy: 0.15 + Math.random() * 0.25,
-        size: 1 + Math.random() * 1.5,
-        phase: Math.random() * TAU,
-        speed: 0.002 + Math.random() * 0.002,
-        hue: 42 + Math.random() * 12,
-      });
-    }
-
-    // ── 月灵气泡 ──
-    if (npcBubble && now < npcBubble.until) {
-      drawNpcBubble(npcBubble, nx, ny + baseR + 30);
-    } else if (npcBubble) { npcBubble = null; }
-  }
-
-  function drawNpcBubble(b, cx, cy) {
-    const isReply = b.type === "reply";
-    const prefix = isReply ? "" : (b.nick ? b.nick + " asks: " : "");
-    const body = prefix + (b.text.length > 80 ? b.text.slice(0, 79) + "…" : b.text);
-    ctx.save();
-    ctx.font = '13px "Noto Serif SC", serif';
-
-    const maxW = 300;
-    const lines = [];
-    let line = "";
-    for (const ch of body) {
-      const test = line + ch;
-      if (ctx.measureText(test).width > maxW && line) {
-        lines.push(line); line = ch;
-      } else { line = test; }
-    }
-    if (line) lines.push(line);
-    if (lines.length > 3) { lines.length = 3; lines[2] = lines[2].slice(0, -1) + "…"; }
-
-    const lineH = 18;
-    const padX = 14, padY = 8;
-    const widest = Math.max(...lines.map(l => ctx.measureText(l).width));
-    const w = widest + padX * 2;
-    const h = lines.length * lineH + padY * 2;
-    const x = cx - w / 2, y = cy;
-
-    ctx.globalAlpha = 0.94;
-    ctx.fillStyle = isReply ? "rgba(255,248,230,0.95)" : "rgba(255,252,244,0.92)";
-    ctx.strokeStyle = isReply ? "rgba(212,168,64,0.35)" : "rgba(176,136,48,0.25)";
-    ctx.lineWidth = 0.8;
-    ctx.shadowColor = "rgba(100,80,50,0.08)";
-    ctx.shadowBlur = 6;
-    roundRect(x, y, w, h, 6);
-    ctx.fill();
-    ctx.shadowColor = "transparent";
-    ctx.globalAlpha = 0.4;
-    ctx.stroke();
-    ctx.globalAlpha = 0.94;
-
-    // 小尾巴朝上
-    ctx.fillStyle = isReply ? "rgba(255,248,230,0.95)" : "rgba(255,252,244,0.92)";
-    ctx.beginPath();
-    ctx.moveTo(cx - 4, y);
-    ctx.lineTo(cx + 4, y);
-    ctx.lineTo(cx, y - 5);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.fillStyle = "#3a3530";
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    for (let i = 0; i < lines.length; i++) {
-      ctx.fillText(lines[i], cx, y + padY + i * lineH + lineH / 2);
-    }
-    ctx.restore();
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  表 情 特 效 · 水 墨（亮底更显墨韵）
-  // ═══════════════════════════════════════════════════════
-  function spawnEmote(uid, emoteType) {
-    const n = members.get(uid);
-    if (!n) return;
-    const wx = n.x + Math.cos(n.phase) * n.drift;
-    const wy = n.y + Math.sin(n.phase * 1.3) * n.drift;
-    const e = { type: emoteType, x: wx, y: wy, born: performance.now(), particles: [] };
-
-    switch (emoteType) {
-      case "bloom": // 🌸 樱花爆发 — 粉色花瓣旋涡向上飘散
-        for (let i = 0; i < 28; i++) {
-          const a = (i / 28) * TAU + (Math.random() - 0.5) * 0.5;
-          const spd = 1.5 + Math.random() * 3;
-          const hue = 330 + Math.random() * 30; // pink range
-          e.particles.push({ x: wx, y: wy, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd - 0.5,
-            size: 3 + Math.random() * 5, life: 1, decay: 0.006 + Math.random() * 0.004,
-            rot: Math.random() * TAU, rotSpd: (Math.random() - 0.5) * 0.06,
-            color: `hsla(${hue},75%,72%,0.8)`, isPetal: true });
-        }
-        break;
-      case "spark": // ✨ 金色烟花 — 向上发射 → 空中炸开
-        e.rocket = { x: wx, y: wy, vy: -6, life: 1 };
-        e.exploded = false;
-        break;
-      case "wind": // 🍃 清风拂叶 — 绿色叶片横扫
-        for (let i = 0; i < 20; i++) {
-          const delay = i * 3;
-          const hue = 90 + Math.random() * 40; // green range
-          e.particles.push({ x: wx - 60 - Math.random() * 40, y: wy + (Math.random() - 0.5) * 50,
-            vx: 3 + Math.random() * 4, vy: (Math.random() - 0.5) * 1.5,
-            size: 3 + Math.random() * 4, life: 1, decay: 0.008 + Math.random() * 0.004,
-            rot: Math.random() * TAU, rotSpd: (Math.random() - 0.5) * 0.08,
-            delay, color: `hsla(${hue},60%,50%,0.7)`, isLeaf: true });
-        }
-        break;
-      case "fox": // 🦊 狐火 — 3团橘黄鬼火旋转散开
-        for (let ring = 0; ring < 3; ring++) {
-          const baseA = (ring / 3) * TAU;
-          for (let i = 0; i < 8; i++) {
-            const a = baseA + (i / 8) * TAU * 0.3 + (Math.random() - 0.5) * 0.3;
-            const dist = 15 + ring * 12;
-            const hue = 25 + Math.random() * 20; // orange
-            e.particles.push({ x: wx + Math.cos(a) * dist, y: wy + Math.sin(a) * dist,
-              vx: Math.cos(a) * (0.5 + Math.random()), vy: Math.sin(a) * (0.5 + Math.random()) - 0.3,
-              size: 4 + Math.random() * 6, life: 1, decay: 0.007 + Math.random() * 0.004,
-              color: `hsla(${hue},90%,58%,0.7)`, glow: `hsla(${hue},95%,65%,0.4)`, orbAngle: a, orbSpeed: 0.03 + ring * 0.01 });
-          }
-        }
-        e.flash = { x: wx, y: wy, life: 1, size: 45 };
-        break;
-      case "rain": // 🌈 彩虹 — 角色头顶渐显彩虹弧
-        e.rainbow = { x: wx, y: wy - 50, radius: 60, progress: 0, life: 1 };
-        // 小星星点缀
-        for (let i = 0; i < 12; i++) {
-          const a = PI + (i / 12) * PI; // 上半弧
-          const r = 55 + Math.random() * 15;
-          e.particles.push({ x: wx + Math.cos(a) * r, y: wy - 50 + Math.sin(a) * r,
-            vx: (Math.random() - 0.5) * 0.3, vy: -0.2 - Math.random() * 0.3,
-            size: 1.5 + Math.random() * 2, life: 1, decay: 0.005 + Math.random() * 0.003,
-            delay: i * 5, hue: (i / 12) * 360 });
-        }
-        break;
-      // ═══ Sprint 7 Phase 7.3 — 11 个新 emote ═══
-      case "leaf": // 🍂 落叶 — 多色叶片飘落
-        for (let i = 0; i < 22; i++) {
-          const a = Math.random() * TAU;
-          const hue = 25 + Math.random() * 55;
-          e.particles.push({ x: wx + (Math.random() - 0.5) * 40, y: wy - 30 + Math.random() * 10,
-            vx: Math.cos(a) * 0.5, vy: 0.8 + Math.random() * 0.6,
-            size: 4 + Math.random() * 4, life: 1, decay: 0.005,
-            rot: Math.random() * TAU, rotSpd: (Math.random() - 0.5) * 0.06,
-            color: `hsla(${hue},65%,55%,0.85)`, isLeaf: true });
-        }
-        break;
-      case "flame": // 🔥 烈焰 — 红橙色火舌竖向跃动
-        for (let i = 0; i < 26; i++) {
-          const hue = Math.random() < 0.3 ? 0 : 15 + Math.random() * 30;
-          e.particles.push({ x: wx + (Math.random() - 0.5) * 35, y: wy + 5,
-            vx: (Math.random() - 0.5) * 1.5, vy: -1.5 - Math.random() * 2,
-            size: 5 + Math.random() * 6, life: 1, decay: 0.012 + Math.random() * 0.008,
-            color: `hsla(${hue},90%,55%,0.75)`, glow: `hsla(${hue + 20},95%,70%,0.55)`,
-            isFlame: true });
-        }
-        break;
-      case "comet": // ☄️ 流星 — 单颗带尾迹斜飞
-        e.comet = { x: wx - 70, y: wy - 70, vx: 4, vy: 2.5, life: 1, trail: [] };
-        break;
-      case "wave": // 🌊 波浪 — 蓝色环形脉冲外扩（多波）
-        for (let r = 0; r < 3; r++) {
-          e.particles.push({ x: wx, y: wy, ring: true,
-            radius: 5 + r * 5, maxRadius: 70 + r * 20, life: 1, decay: 0.015,
-            color: `hsla(${200 + r * 10},75%,55%,0.6)`, delay: r * 8 });
-        }
-        break;
-      case "bubble": // 🫧 气泡 — 大小不一的圆点上浮
-        for (let i = 0; i < 18; i++) {
-          e.particles.push({ x: wx + (Math.random() - 0.5) * 50, y: wy + 10,
-            vx: (Math.random() - 0.5) * 0.4, vy: -0.8 - Math.random() * 1.2,
-            size: 4 + Math.random() * 9, life: 1, decay: 0.006,
-            color: "rgba(180,220,255,0.55)", glow: "rgba(220,240,255,0.7)", isBubble: true });
-        }
-        break;
-      case "mist": // 🌫️ 雾气 — 淡蓝灰云团缓慢扩散
-        for (let i = 0; i < 14; i++) {
-          const a = Math.random() * TAU;
-          e.particles.push({ x: wx + Math.cos(a) * 10, y: wy + Math.sin(a) * 10,
-            vx: Math.cos(a) * 0.4, vy: Math.sin(a) * 0.4 - 0.2,
-            size: 14 + Math.random() * 14, life: 1, decay: 0.008,
-            color: "rgba(180,200,220,0.35)", isMist: true });
-        }
-        break;
-      case "tide": // 💧 潮汐 — 水滴朝四面溅射
-        for (let i = 0; i < 20; i++) {
-          const a = (i / 20) * TAU + (Math.random() - 0.5) * 0.3;
-          const spd = 1.8 + Math.random() * 2;
-          e.particles.push({ x: wx, y: wy, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd - 0.8,
-            size: 3 + Math.random() * 3, life: 1, decay: 0.013,
-            color: "hsla(210,80%,60%,0.85)", glow: "hsla(200,90%,75%,0.5)", isDrop: true });
-        }
-        break;
-      case "star": // ⭐ 星辰 — 金黄五角星脉冲
-        for (let i = 0; i < 14; i++) {
-          const a = Math.random() * TAU;
-          const r = 18 + Math.random() * 35;
-          e.particles.push({ x: wx + Math.cos(a) * r, y: wy + Math.sin(a) * r - 10,
-            vx: 0, vy: -0.3, size: 4 + Math.random() * 4, life: 1, decay: 0.008,
-            twinkle: Math.random() * TAU, color: "hsla(50,95%,65%,0.9)",
-            glow: "hsla(55,100%,75%,0.6)", isStar: true });
-        }
-        break;
-      case "aurora": // 🌌 极光 — 紫绿渐变光带横向飘
-        e.auroraBands = [];
-        for (let b = 0; b < 3; b++) {
-          e.auroraBands.push({
-            y: wy - 40 + b * 12, phase: Math.random() * TAU,
-            speed: 0.0008 + Math.random() * 0.0005, life: 1,
-            hue1: 270 + b * 20, hue2: 140 + b * 30,
-          });
-        }
-        break;
-      case "lightning": // ⚡ 闪电 — 紫白色折线 + 闪光
-        e.bolts = [];
-        for (let b = 0; b < 2; b++) {
-          const path = [];
-          let lx = wx + (Math.random() - 0.5) * 30, ly = wy - 80;
-          path.push({ x: lx, y: ly });
-          for (let s = 0; s < 6; s++) {
-            lx += (Math.random() - 0.5) * 24;
-            ly += 18;
-            path.push({ x: lx, y: ly });
-          }
-          e.bolts.push({ path, life: 1, decay: 0.05, delay: b * 80 });
-        }
-        e.flash = { x: wx, y: wy - 40, life: 1, size: 80 };
-        break;
-      case "halo": // 💫 光环 — 角色头顶旋转金色光环
-        e.halos = [];
-        for (let h = 0; h < 3; h++) {
-          e.halos.push({
-            cx: wx, cy: wy - 8 - h * 4,
-            rx: 38 + h * 4, ry: 12 + h * 1.5,
-            angle: 0, speed: 0.04 - h * 0.01,
-            life: 1, hue: 45 + h * 5,
-          });
-        }
-        break;
-      // ⚡ 4 个大招 + omni（集齐一系/全部解锁的大型 5-8s 演出）
-      case "gaia": // 🌍 自然大招 — 全屏花瓣雨
-        for (let i = 0; i < 80; i++) {
-          const hue = 320 + Math.random() * 50;
-          e.particles.push({ x: Math.random() * W, y: -20 - Math.random() * 200,
-            vx: (Math.random() - 0.5) * 1, vy: 1 + Math.random() * 2,
-            size: 4 + Math.random() * 5, life: 1, decay: 0.0015,
-            rot: Math.random() * TAU, rotSpd: (Math.random() - 0.5) * 0.05,
-            color: `hsla(${hue},70%,68%,0.85)`, isPetal: true });
-        }
-        e.bigDuration = 5000;
-        break;
-      case "solar": // ☀️ 火系大招 — 全屏暖色 tint + 上升火舌
-        e.solarTint = { life: 1, decay: 0.0015 };
-        for (let i = 0; i < 60; i++) {
-          e.particles.push({
-            x: Math.random() * W, y: H + 20,
-            vx: (Math.random() - 0.5) * 0.5, vy: -1 - Math.random() * 2,
-            size: 6 + Math.random() * 8, life: 1, decay: 0.002,
-            color: `hsla(${15 + Math.random() * 30},90%,60%,0.5)`,
-            isFlame: true, big: true,
-          });
-        }
-        e.bigDuration = 5000;
-        break;
-      case "dragon": // 🐉 水系大招 — 蓝色巨龙波浪绕屏（多波同心圆 + 弧形粒子）
-        for (let r = 0; r < 6; r++) {
-          e.particles.push({ x: W / 2, y: H / 2, ring: true,
-            radius: 20 + r * 8, maxRadius: Math.max(W, H) * 0.7, life: 1, decay: 0.005,
-            color: `hsla(${200 + r * 8},80%,55%,0.5)`, delay: r * 14 });
-        }
-        for (let i = 0; i < 50; i++) {
-          const a = Math.random() * TAU;
-          const r0 = 80 + Math.random() * 200;
-          e.particles.push({ x: W / 2 + Math.cos(a) * r0, y: H / 2 + Math.sin(a) * r0,
-            vx: Math.cos(a) * 1.2, vy: Math.sin(a) * 1.2,
-            size: 4 + Math.random() * 4, life: 1, decay: 0.003,
-            color: "hsla(210,85%,60%,0.85)", glow: "hsla(200,90%,75%,0.5)", isDrop: true });
-        }
-        e.bigDuration = 5000;
-        break;
-      case "galaxy": // 🌠 光系大招 — 全屏星河（背景渐变 + 流星 + 星点）
-        e.galaxyTint = { life: 1, decay: 0.0015 };
-        for (let i = 0; i < 100; i++) {
-          e.particles.push({
-            x: Math.random() * W, y: Math.random() * H,
-            vx: 0, vy: 0, size: 1 + Math.random() * 3,
-            life: 1, decay: 0.002, twinkle: Math.random() * TAU,
-            color: `hsla(${200 + Math.random() * 100},80%,75%,0.9)`,
-            glow: "rgba(180,200,255,0.6)", isStar: true, big: true,
-          });
-        }
-        // 几条流星
-        for (let i = 0; i < 6; i++) {
-          e.particles.push({
-            x: Math.random() * W, y: -20,
-            vx: 4 + Math.random() * 2, vy: 3 + Math.random() * 1.5,
-            size: 3, life: 1, decay: 0.005,
-            color: "rgba(255,255,255,0.95)", glow: "rgba(180,220,255,0.7)",
-            trail: [], isComet: true,
-          });
-        }
-        e.bigDuration = 5000;
-        break;
-      case "omni": // 🌌 万象归一 — 全屏彩虹渐变 + 全粒子混合 8s
-        e.omniTint = { life: 1, decay: 0.001 };
-        // 多色花瓣
-        for (let i = 0; i < 60; i++) {
-          const hue = Math.random() * 360;
-          e.particles.push({ x: Math.random() * W, y: -20 - Math.random() * 200,
-            vx: (Math.random() - 0.5) * 1, vy: 1 + Math.random() * 2,
-            size: 5 + Math.random() * 5, life: 1, decay: 0.0012,
-            rot: Math.random() * TAU, rotSpd: (Math.random() - 0.5) * 0.06,
-            color: `hsla(${hue},80%,68%,0.85)`, isPetal: true });
-        }
-        // 星点
-        for (let i = 0; i < 80; i++) {
-          const hue = Math.random() * 360;
-          e.particles.push({
-            x: Math.random() * W, y: Math.random() * H,
-            vx: 0, vy: 0, size: 2 + Math.random() * 3,
-            life: 1, decay: 0.0015, twinkle: Math.random() * TAU,
-            color: `hsla(${hue},85%,72%,0.95)`,
-            glow: `hsla(${hue},90%,80%,0.6)`, isStar: true, big: true,
-          });
-        }
-        e.bigDuration = 8000;
-        break;
-    }
-    emoteEffects.push(e);
-  }
-
-  function drawEmoteEffects(t) {
-    const now = performance.now();
-    for (let ei = emoteEffects.length - 1; ei >= 0; ei--) {
-      const e = emoteEffects[ei];
-      const age = now - e.born;
-      let alive = false;
-
-      switch (e.type) {
-        case "bloom":
-          for (let i = e.particles.length - 1; i >= 0; i--) {
-            const p = e.particles[i];
-            p.x += p.vx; p.y += p.vy - 0.3; p.vx *= 0.98; p.vy *= 0.98; p.life -= p.decay;
-            p.rot += p.rotSpd;
-            if (p.life <= 0) { e.particles.splice(i, 1); continue; }
-            alive = true;
-            ctx.save(); ctx.globalAlpha = p.life * 0.8;
-            ctx.translate(p.x, p.y); ctx.rotate(p.rot);
-            ctx.fillStyle = p.color;
-            ctx.beginPath();
-            ctx.moveTo(0, -p.size); ctx.quadraticCurveTo(p.size * 0.7, -p.size * 0.2, 0, p.size * 0.8);
-            ctx.quadraticCurveTo(-p.size * 0.7, -p.size * 0.2, 0, -p.size);
-            ctx.fill();
-            ctx.restore();
-          }
-          break;
-        case "spark":
-          // Rocket phase
-          if (e.rocket && !e.exploded) {
-            alive = true;
-            e.rocket.y += e.rocket.vy; e.rocket.vy += 0.12;
-            ctx.save(); ctx.globalAlpha = 0.9;
-            ctx.fillStyle = "#f0d060"; ctx.beginPath();
-            ctx.arc(e.rocket.x, e.rocket.y, 3, 0, TAU); ctx.fill();
-            // trail
-            ctx.globalAlpha = 0.4; ctx.fillStyle = "#f0a030";
-            ctx.beginPath(); ctx.arc(e.rocket.x, e.rocket.y + 4, 2, 0, TAU); ctx.fill();
-            ctx.restore();
-            if (e.rocket.vy >= -1) { // apex → explode
-              e.exploded = true;
-              const ex = e.rocket.x, ey = e.rocket.y;
-              for (let i = 0; i < 36; i++) {
-                const a = (i / 36) * TAU + (Math.random() - 0.5) * 0.2;
-                const spd = 2 + Math.random() * 4;
-                const hue = Math.random() * 360;
-                e.particles.push({ x: ex, y: ey, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd,
-                  size: 2 + Math.random() * 3, life: 1, decay: 0.012 + Math.random() * 0.008,
-                  color: `hsla(${hue},85%,65%,0.9)`, glow: `hsla(${hue},90%,70%,0.5)`, trail: [] });
-              }
-              e.flash = { x: ex, y: ey, life: 1, size: 60 };
-            }
-          }
-          // Explosion flash
-          if (e.flash && e.flash.life > 0) {
-            alive = true; e.flash.life -= 0.04;
-            ctx.save(); ctx.globalAlpha = e.flash.life * 0.35;
-            const fg = ctx.createRadialGradient(e.flash.x, e.flash.y, 0, e.flash.x, e.flash.y, e.flash.size);
-            fg.addColorStop(0, "rgba(255,240,200,0.6)"); fg.addColorStop(1, "rgba(255,240,200,0)");
-            ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(e.flash.x, e.flash.y, e.flash.size, 0, TAU); ctx.fill();
-            ctx.restore();
-          }
-          // Sparks
-          for (let i = e.particles.length - 1; i >= 0; i--) {
-            const p = e.particles[i];
-            p.x += p.vx; p.y += p.vy; p.vy += 0.06; p.vx *= 0.98; p.life -= p.decay;
-            if (p.life <= 0) { e.particles.splice(i, 1); continue; }
-            alive = true;
-            if (p.trail) { p.trail.push({ x: p.x, y: p.y }); if (p.trail.length > 5) p.trail.shift(); }
-            ctx.save(); ctx.globalAlpha = p.life;
-            ctx.shadowColor = p.glow; ctx.shadowBlur = 5; ctx.fillStyle = p.color;
-            if (p.trail && p.trail.length > 1) {
-              ctx.beginPath(); ctx.moveTo(p.trail[0].x, p.trail[0].y);
-              for (const pt of p.trail) ctx.lineTo(pt.x, pt.y);
-              ctx.lineWidth = p.size * p.life * 0.6; ctx.strokeStyle = p.color; ctx.lineCap = "round"; ctx.stroke();
-            }
-            ctx.beginPath(); ctx.arc(p.x, p.y, p.size * p.life, 0, TAU); ctx.fill();
-            ctx.restore();
-          }
-          break;
-        case "wind":
-          for (let i = e.particles.length - 1; i >= 0; i--) {
-            const p = e.particles[i];
-            if (age < (p.delay || 0) * 16) { alive = true; continue; }
-            p.x += p.vx; p.y += p.vy + Math.sin(age * 0.005 + i) * 0.3;
-            p.vx *= 0.995; p.rot += p.rotSpd; p.life -= p.decay;
-            if (p.life <= 0) { e.particles.splice(i, 1); continue; }
-            alive = true;
-            ctx.save(); ctx.globalAlpha = p.life * 0.75;
-            ctx.translate(p.x, p.y); ctx.rotate(p.rot);
-            ctx.fillStyle = p.color;
-            // Leaf shape
-            ctx.beginPath();
-            ctx.ellipse(0, 0, p.size * 1.5, p.size * 0.6, 0, 0, TAU);
-            ctx.fill();
-            ctx.strokeStyle = `hsla(100,40%,35%,${p.life * 0.3})`; ctx.lineWidth = 0.5;
-            ctx.beginPath(); ctx.moveTo(-p.size, 0); ctx.lineTo(p.size, 0); ctx.stroke();
-            ctx.restore();
-          }
-          break;
-        case "fox":
-          if (e.flash && e.flash.life > 0) {
-            alive = true; e.flash.life -= 0.03;
-            ctx.save(); ctx.globalAlpha = e.flash.life * 0.3;
-            const fg = ctx.createRadialGradient(e.flash.x, e.flash.y, 0, e.flash.x, e.flash.y, e.flash.size);
-            fg.addColorStop(0, "rgba(255,180,60,0.5)"); fg.addColorStop(1, "rgba(255,180,60,0)");
-            ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(e.flash.x, e.flash.y, e.flash.size, 0, TAU); ctx.fill();
-            ctx.restore();
-          }
-          for (let i = e.particles.length - 1; i >= 0; i--) {
-            const p = e.particles[i];
-            // Orbit outward
-            p.orbAngle += p.orbSpeed;
-            p.x += p.vx + Math.cos(p.orbAngle) * 0.5; p.y += p.vy + Math.sin(p.orbAngle) * 0.5 - 0.15;
-            p.vx *= 0.99; p.vy *= 0.99; p.life -= p.decay;
-            if (p.life <= 0) { e.particles.splice(i, 1); continue; }
-            alive = true;
-            ctx.save(); ctx.globalAlpha = p.life * 0.8;
-            ctx.shadowColor = p.glow; ctx.shadowBlur = 8;
-            const r = p.size * p.life;
-            const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
-            g.addColorStop(0, p.color); g.addColorStop(1, "rgba(255,120,20,0)");
-            ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, TAU); ctx.fill();
-            ctx.restore();
-          }
-          break;
-        case "rain":
-          if (e.rainbow) {
-            e.rainbow.progress = Math.min(1, e.rainbow.progress + 0.015);
-            if (e.rainbow.progress >= 1) e.rainbow.life -= 0.008;
-            if (e.rainbow.life <= 0) { e.rainbow = null; }
-            else {
-              alive = true;
-              const rb = e.rainbow;
-              ctx.save();
-              const colors = ["#ff0000","#ff7f00","#ffff00","#00ff00","#0099ff","#4b0082","#8f00ff"];
-              for (let c = 0; c < colors.length; c++) {
-                ctx.globalAlpha = rb.life * 0.5 * rb.progress;
-                ctx.strokeStyle = colors[c]; ctx.lineWidth = 3;
-                const r = rb.radius - c * 4;
-                ctx.beginPath();
-                ctx.arc(rb.x, rb.y, Math.max(5, r), PI, PI + PI * rb.progress);
-                ctx.stroke();
-              }
-              ctx.restore();
-            }
-          }
-          for (let i = e.particles.length - 1; i >= 0; i--) {
-            const p = e.particles[i];
-            if (age < (p.delay || 0) * 16) { alive = true; continue; }
-            p.x += p.vx; p.y += p.vy; p.life -= p.decay;
-            if (p.life <= 0) { e.particles.splice(i, 1); continue; }
-            alive = true;
-            ctx.save(); ctx.globalAlpha = p.life * 0.7;
-            ctx.fillStyle = `hsla(${p.hue},80%,70%,0.8)`;
-            ctx.shadowColor = `hsla(${p.hue},90%,75%,0.4)`; ctx.shadowBlur = 4;
-            // Star shape
-            const sz = p.size * p.life;
-            ctx.beginPath();
-            for (let s = 0; s < 5; s++) {
-              const a1 = (s / 5) * TAU - PI / 2;
-              const a2 = a1 + TAU / 10;
-              ctx.lineTo(p.x + Math.cos(a1) * sz, p.y + Math.sin(a1) * sz);
-              ctx.lineTo(p.x + Math.cos(a2) * sz * 0.4, p.y + Math.sin(a2) * sz * 0.4);
-            }
-            ctx.closePath(); ctx.fill();
-            ctx.restore();
-          }
-          break;
-        // ═══ Sprint 7 Phase 7.3 — 通用粒子绘制（所有新 emote 共享）═══
-        // leaf / flame / wave / bubble / mist / tide / star / aurora / lightning / halo
-        // gaia / solar / dragon / galaxy / omni (大招/omni 多用 bigDuration)
-        // comet 单独处理
-        case "leaf":
-        case "flame":
-        case "wave":
-        case "bubble":
-        case "mist":
-        case "tide":
-        case "star":
-        case "halo":
-        case "aurora":
-        case "lightning":
-        case "comet":
-        case "gaia":
-        case "solar":
-        case "dragon":
-        case "galaxy":
-        case "omni": {
-          const maxAge = e.bigDuration || 2400;
-          if (age < maxAge) alive = true;
-          // 全屏 tint (omni / solar / galaxy)
-          if (e.omniTint) {
-            const ka = (1 - age / maxAge);
-            e.omniTint.life = ka;
-            ctx.save();
-            const h = (t * 0.04) % 360;
-            const g = ctx.createLinearGradient(0, 0, W, H);
-            g.addColorStop(0, `hsla(${h},85%,68%,${0.18 * ka})`);
-            g.addColorStop(0.5, `hsla(${(h + 120) % 360},85%,72%,${0.18 * ka})`);
-            g.addColorStop(1, `hsla(${(h + 240) % 360},85%,72%,${0.18 * ka})`);
-            ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-            ctx.restore();
-          } else if (e.solarTint) {
-            const ka = (1 - age / maxAge);
-            e.solarTint.life = ka;
-            ctx.save();
-            ctx.fillStyle = `rgba(255,160,80,${0.18 * ka})`;
-            ctx.fillRect(0, 0, W, H);
-            ctx.restore();
-          } else if (e.galaxyTint) {
-            const ka = (1 - age / maxAge);
-            e.galaxyTint.life = ka;
-            ctx.save();
-            const g = ctx.createLinearGradient(0, 0, 0, H);
-            g.addColorStop(0, `rgba(20,10,50,${0.4 * ka})`);
-            g.addColorStop(1, `rgba(80,40,140,${0.25 * ka})`);
-            ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-            ctx.restore();
-          }
-          // Comet — 单独路径
-          if (e.comet) {
-            const c = e.comet;
-            c.x += c.vx; c.y += c.vy; c.life -= 0.012;
-            c.trail.push({ x: c.x, y: c.y });
-            if (c.trail.length > 14) c.trail.shift();
-            if (c.life > 0) {
-              alive = true;
-              ctx.save();
-              for (let i = 0; i < c.trail.length; i++) {
-                const a = (i / c.trail.length) * c.life;
-                ctx.globalAlpha = a;
-                ctx.fillStyle = "rgba(255,240,180,0.9)";
-                ctx.beginPath(); ctx.arc(c.trail[i].x, c.trail[i].y, 2 + i * 0.3, 0, TAU); ctx.fill();
-              }
-              ctx.shadowColor = "rgba(255,220,140,0.7)"; ctx.shadowBlur = 12;
-              ctx.fillStyle = "rgba(255,240,200,1)";
-              ctx.beginPath(); ctx.arc(c.x, c.y, 4, 0, TAU); ctx.fill();
-              ctx.restore();
-            }
-          }
-          // Aurora — 横向流动光带
-          if (e.auroraBands) {
-            for (const band of e.auroraBands) {
-              band.life -= 0.005;
-              if (band.life <= 0) continue;
-              alive = true;
-              ctx.save();
-              ctx.globalAlpha = band.life * 0.55;
-              const g = ctx.createLinearGradient(0, band.y - 20, 0, band.y + 20);
-              g.addColorStop(0, `hsla(${band.hue1},70%,55%,0)`);
-              g.addColorStop(0.5, `hsla(${band.hue1},80%,65%,0.7)`);
-              g.addColorStop(1, `hsla(${band.hue2},70%,55%,0)`);
-              ctx.fillStyle = g;
-              ctx.beginPath();
-              for (let x = 0; x <= W; x += 20) {
-                const wy2 = band.y + Math.sin(x * 0.01 + band.phase + t * band.speed) * 8;
-                if (x === 0) ctx.moveTo(x, wy2);
-                else ctx.lineTo(x, wy2);
-              }
-              for (let x = W; x >= 0; x -= 20) {
-                const wy2 = band.y + Math.sin(x * 0.01 + band.phase + t * band.speed) * 8 + 30;
-                ctx.lineTo(x, wy2);
-              }
-              ctx.closePath(); ctx.fill();
-              ctx.restore();
-            }
-          }
-          // Lightning bolts
-          if (e.bolts) {
-            for (const b of e.bolts) {
-              if (age < (b.delay || 0)) { alive = true; continue; }
-              b.life -= b.decay;
-              if (b.life <= 0) continue;
-              alive = true;
-              ctx.save();
-              ctx.globalAlpha = b.life;
-              ctx.shadowColor = "rgba(220,180,255,0.85)"; ctx.shadowBlur = 14;
-              ctx.strokeStyle = "rgba(240,220,255,0.95)"; ctx.lineWidth = 3;
-              ctx.beginPath();
-              ctx.moveTo(b.path[0].x, b.path[0].y);
-              for (let i = 1; i < b.path.length; i++) ctx.lineTo(b.path[i].x, b.path[i].y);
-              ctx.stroke();
-              ctx.restore();
-            }
-          }
-          // Lightning flash
-          if (e.flash && e.flash.life > 0) {
-            e.flash.life -= 0.04; alive = true;
-            ctx.save(); ctx.globalAlpha = e.flash.life * 0.4;
-            const fg = ctx.createRadialGradient(e.flash.x, e.flash.y, 0, e.flash.x, e.flash.y, e.flash.size);
-            fg.addColorStop(0, "rgba(255,240,255,0.7)"); fg.addColorStop(1, "rgba(255,240,255,0)");
-            ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(e.flash.x, e.flash.y, e.flash.size, 0, TAU); ctx.fill();
-            ctx.restore();
-          }
-          // Halos — 旋转椭圆光环
-          if (e.halos) {
-            for (const h of e.halos) {
-              h.angle += h.speed; h.life -= 0.005;
-              if (h.life <= 0) continue;
-              alive = true;
-              ctx.save();
-              ctx.globalAlpha = h.life * 0.7;
-              ctx.strokeStyle = `hsla(${h.hue},90%,70%,0.85)`;
-              ctx.lineWidth = 2.5;
-              ctx.shadowColor = `hsla(${h.hue},95%,80%,0.6)`; ctx.shadowBlur = 10;
-              ctx.beginPath();
-              ctx.ellipse(h.cx, h.cy, h.rx, h.ry, h.angle, 0, TAU);
-              ctx.stroke();
-              ctx.restore();
-            }
-          }
-          // 通用 particles
-          for (let i = e.particles.length - 1; i >= 0; i--) {
-            const p = e.particles[i];
-            if (age < (p.delay || 0) * 16) { alive = true; continue; }
-            // ring 类型 — 圆形外扩
-            if (p.ring) {
-              p.life -= p.decay; p.radius += 1.4;
-              if (p.life <= 0 || p.radius > p.maxRadius) { e.particles.splice(i, 1); continue; }
-              alive = true;
-              ctx.save(); ctx.globalAlpha = p.life * 0.7;
-              ctx.strokeStyle = p.color; ctx.lineWidth = 2.5;
-              ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, TAU); ctx.stroke();
-              ctx.restore();
-              continue;
-            }
-            // 物理更新
-            p.x += p.vx;
-            p.y += p.vy;
-            // 不同类型的重力 / 阻尼
-            if (p.isFlame) { p.vy *= 0.97; p.vx *= 0.95; }
-            else if (p.isBubble) { p.vy -= 0.02; p.vx *= 0.98; }
-            else if (p.isMist) { p.vx *= 0.99; p.vy *= 0.99; }
-            else if (p.isDrop) { p.vy += 0.12; p.vx *= 0.99; }
-            else if (p.isLeaf) {
-              if (p.rotSpd) p.rot += p.rotSpd;
-              p.vx += Math.sin(t * 0.003 + p.x * 0.01) * 0.04;
-            } else if (p.isPetal) {
-              if (p.rotSpd) p.rot += p.rotSpd;
-            } else if (p.isComet) {
-              p.trail = p.trail || [];
-              p.trail.push({ x: p.x, y: p.y });
-              if (p.trail.length > 10) p.trail.shift();
-            }
-            p.life -= p.decay;
-            if (p.life <= 0) { e.particles.splice(i, 1); continue; }
-            alive = true;
-            ctx.save();
-            ctx.globalAlpha = p.life;
-            if (p.glow) { ctx.shadowColor = p.glow; ctx.shadowBlur = 6; }
-            ctx.fillStyle = p.color;
-            // 叶片/花瓣 — 旋转椭圆
-            if (p.isLeaf || p.isPetal) {
-              ctx.translate(p.x, p.y); ctx.rotate(p.rot || 0);
-              ctx.beginPath();
-              ctx.moveTo(0, -p.size); ctx.quadraticCurveTo(p.size * 0.7, -p.size * 0.2, 0, p.size * 0.8);
-              ctx.quadraticCurveTo(-p.size * 0.7, -p.size * 0.2, 0, -p.size);
-              ctx.fill();
-            }
-            // 气泡 — 圆 + 高光
-            else if (p.isBubble) {
-              ctx.beginPath(); ctx.arc(p.x, p.y, p.size * p.life, 0, TAU); ctx.fill();
-              ctx.fillStyle = "rgba(255,255,255,0.5)";
-              ctx.beginPath(); ctx.arc(p.x - p.size * 0.3, p.y - p.size * 0.3, p.size * 0.25, 0, TAU); ctx.fill();
-            }
-            // 雾 — 软圆
-            else if (p.isMist) {
-              const r = p.size * p.life;
-              const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
-              g.addColorStop(0, p.color); g.addColorStop(1, "rgba(180,200,220,0)");
-              ctx.fillStyle = g;
-              ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, TAU); ctx.fill();
-            }
-            // 星 — 闪烁五角星
-            else if (p.isStar) {
-              const tw = 0.6 + 0.4 * Math.sin(t * 0.005 + (p.twinkle || 0));
-              ctx.globalAlpha = p.life * tw;
-              const sz = p.size * (p.big ? 1 : p.life);
-              ctx.beginPath();
-              for (let s = 0; s < 5; s++) {
-                const a1 = (s / 5) * TAU - PI / 2;
-                const a2 = a1 + TAU / 10;
-                ctx.lineTo(p.x + Math.cos(a1) * sz, p.y + Math.sin(a1) * sz);
-                ctx.lineTo(p.x + Math.cos(a2) * sz * 0.4, p.y + Math.sin(a2) * sz * 0.4);
-              }
-              ctx.closePath(); ctx.fill();
-            }
-            // 流星 — 拖尾
-            else if (p.isComet && p.trail) {
-              for (let ti = 0; ti < p.trail.length; ti++) {
-                ctx.globalAlpha = p.life * (ti / p.trail.length) * 0.8;
-                ctx.beginPath(); ctx.arc(p.trail[ti].x, p.trail[ti].y, 2, 0, TAU); ctx.fill();
-              }
-              ctx.globalAlpha = p.life;
-              ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, TAU); ctx.fill();
-            }
-            // 水滴 / 火焰 / 默认 — 圆
-            else {
-              ctx.beginPath(); ctx.arc(p.x, p.y, p.size * p.life, 0, TAU); ctx.fill();
-            }
-            ctx.restore();
-          }
-          break;
-        }
-      }
-      if (!alive) emoteEffects.splice(ei, 1);
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  成 就 法 阵
-  // ═══════════════════════════════════════════════════════
-  function drawAchCircle(t) {
-    if (!achEffect) return;
-    const age = performance.now() - achEffect.start;
-    const duration = 4000;
-    if (age > duration) { achEffect = null; return; }
-    const progress = age / duration;
-    const alpha = progress < 0.12 ? progress / 0.12 :
-                  progress > 0.7 ? (1 - progress) / 0.3 : 1;
-
-    const cx = W / 2, cy = H / 2;
-    ctx.save();
-
-    ctx.globalAlpha = alpha * 0.3;
-    ctx.strokeStyle = GOLD;
-    ctx.lineWidth = 1.5;
-    const outerR = Math.min(W, H) * 0.22;
-    ctx.beginPath(); ctx.arc(cx, cy, outerR, 0, TAU); ctx.stroke();
-
-    const tickCount = 24;
-    for (let i = 0; i < tickCount; i++) {
-      const a = (i / tickCount) * TAU + t * 0.0005;
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(a) * (outerR - 6), cy + Math.sin(a) * (outerR - 6));
-      ctx.lineTo(cx + Math.cos(a) * (outerR + 6), cy + Math.sin(a) * (outerR + 6));
-      ctx.stroke();
-    }
-
-    const midR = outerR * 0.72;
-    ctx.beginPath(); ctx.arc(cx, cy, midR, 0, TAU); ctx.stroke();
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * TAU - t * 0.0008;
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(a) * (midR - 4), cy + Math.sin(a) * (midR - 4));
-      ctx.lineTo(cx + Math.cos(a) * (midR + 4), cy + Math.sin(a) * (midR + 4));
-      ctx.stroke();
-    }
-
-    ctx.globalAlpha = alpha * 0.22;
-    ctx.lineWidth = 1.2;
-    const starR = outerR * 0.55;
-    for (let tri = 0; tri < 2; tri++) {
-      ctx.beginPath();
-      for (let i = 0; i < 3; i++) {
-        const a = (i / 3) * TAU + tri * PI / 3 + t * 0.0003 * (tri === 0 ? 1 : -1);
-        const x = cx + Math.cos(a) * starR;
-        const y = cy + Math.sin(a) * starR;
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-      ctx.stroke();
-    }
-
-    ctx.globalAlpha = alpha * 0.12;
-    const innerR = outerR * 0.3;
-    for (let tri = 0; tri < 2; tri++) {
-      ctx.beginPath();
-      for (let i = 0; i < 3; i++) {
-        const a = (i / 3) * TAU + tri * PI / 3 - t * 0.0006;
-        const x = cx + Math.cos(a) * innerR;
-        const y = cy + Math.sin(a) * innerR;
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-      ctx.stroke();
-    }
-
-    ctx.globalAlpha = alpha * 0.15;
-    const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, outerR * 0.5);
-    cg.addColorStop(0, "rgba(176,136,48,0.4)");
-    cg.addColorStop(1, "rgba(176,136,48,0)");
-    ctx.fillStyle = cg;
-    ctx.beginPath(); ctx.arc(cx, cy, outerR * 0.5, 0, TAU); ctx.fill();
-
-    ctx.restore();
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  渲 染 循 环
-  // ═══════════════════════════════════════════════════════
-  function resize() {
-    const dpr = window.devicePixelRatio || 1;
-    W = window.innerWidth;
-    H = window.innerHeight - 52 - 140;
-    canvas.width = W * dpr;
-    canvas.height = H * dpr;
-    canvas.style.width = W + "px";
-    canvas.style.height = H + "px";
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    calcMountains();
-  }
-  window.addEventListener("resize", resize);
-
-  let lastSakura = 0;
-
-  function frame(t) {
-    ctx.clearRect(0, 0, W, H);
-
-    // 背景层（AI 底图优先，加载中显示纯色过渡）
-    if (!drawBgCover()) {
-      ctx.fillStyle = "#d8dcc8";
-      ctx.fillRect(0, 0, W, H);
-    }
-
-    // 特效层
-    drawAchCircle(t);
-
-    // Sprint 7: 推进所有正在融合的角色（必须在角色绘制前算位置）
-    updateFusions(t);
-
-    // 角色层
-    const now = performance.now();
-    for (const [uid, n] of members) {
-      if (uid === NPC_UID) continue;
-      let alpha = 1;
-      if (n.leaving) {
-        const k = (now - n.leaving) / 700;
-        if (k >= 1) { members.delete(uid); continue; }
-        alpha = 1 - k;
-      }
-      const age = now - n.born;
-      let scale = 1, entryY = 0;
-      if (age < 700) {
-        const k = age / 700;
-        scale = 0.3 + 0.7 * easeOutBack(k);
-        entryY = (1 - easeOutQuart(k)) * 50;
-        alpha *= easeOutQuart(k);
-      }
-      if (n.pop > 0) { scale *= 1 + 0.12 * n.pop; n.pop = Math.max(0, n.pop - 0.035); }
-
-      const bobY = Math.sin(t * 0.0012 + n.phase * 2) * 3;
-      // Sprint 7: 融合演出期间，位置由 updateFusions 接管（忽略 IMU/drift）
-      if (n.fusion) {
-        // n.x/n.y 已被 updateFusions 改写
-        // 融合后期角色淡出（光柱阶段中心点淡入淡出）
-        if (n.fusion.phase === "hold") alpha *= 0.4;
-        else if (n.fusion.phase === "burst") alpha *= 0.65;
-      } else {
-        const tiltActive = n.lastTilt && (now - n.lastTilt < 1200);
-        if (tiltActive) {
-          const speed = 2.0;
-          n.x += n.tiltDx * speed;
-          n.y += n.tiltDy * speed;
-        } else {
-          n.x += Math.cos(t * 0.0002 * n.speed + n.phase) * 0.15;
-          n.y += Math.sin(t * 0.0003 * n.speed + n.phase * 1.3) * 0.1;
-        }
-        n.x = Math.max(50, Math.min(W - 50, n.x));
-        n.y = Math.max(50, Math.min(H - 50, n.y));
-      }
-      const wx = n.x;
-      const wy = n.y + bobY + entryY;
-
-      drawCharacter(n, wx, wy, scale, alpha, t);
-      // Sprint 7: 求偶光环 + 脚下 skill chips
-      drawPairAura(n, wx, wy, scale, alpha, t);
-      drawKingCrown(n, wx, wy, scale, alpha, t);
-      drawSkillChips(n, wx, wy, scale, alpha);
-
-      if (n.bubble && now < n.bubble.until) {
-        drawBubble(n.bubble.text, wx, wy - CHAR_SIZE * scale * 0.55, alpha, n.bubble.channel || n.channel);
-      } else if (n.bubble) { n.bubble = null; }
-    }
-
-    // Sprint 7: 融合演出特效（光柱 / 飞符 / 粒子）在角色层之上
-    drawFusionFx(t);
-
-    // NPC + 粒子
-    drawNpc(t);
-    drawEmoteEffects(t);
-    drawJoinBursts(t);
-
-    if (t - lastSakura > 350) { spawnSakura(); lastSakura = t; }
-    updateAndDrawSakura(t);
-    drawPollen(t);
-
-    requestAnimationFrame(frame);
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  日 志
-  // ═══════════════════════════════════════════════════════
-  const logEl = $("log");
-  const MAX_LOG = 5;
-  function pushLog(html) {
-    const div = document.createElement("div");
-    div.className = "line";
-    const ts = new Date().toLocaleTimeString("zh-CN", { hour12: false });
-    div.innerHTML = `<span class="ts">[${ts}]</span> ${html}`;
-    logEl.appendChild(div);
-    while (logEl.children.length > MAX_LOG) logEl.removeChild(logEl.firstChild);
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  HUD
-  // ═══════════════════════════════════════════════════════
-  function updateHud() {
-    let realCount = 0;
-    const counts = { main: 0, fishing: 0, help: 0 };
-    for (const n of members.values()) {
-      if (n.uid === NPC_UID) continue;
-      realCount++;
-      counts[n.channel] = (counts[n.channel] || 0) + 1;
-    }
-    $("count").textContent = realCount;
-    $("msgs").textContent = totalMessages;
-    $("empty").classList.toggle("hidden", realCount > 0);
-    const CH_LABELS = { main: "#MAIN", fishing: "#FISH", help: "#HELP" };
-    for (const ch of CHANNELS) {
-      const el = $("ch-" + ch);
-      if (!el) continue;
-      el.textContent = CH_LABELS[ch] + " " + counts[ch];
-      el.classList.toggle("empty", counts[ch] === 0);
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  成 就 / 任 务 UI
-  // ═══════════════════════════════════════════════════════
-  let achTimer = null;
-  function showAchievement(d) {
-    const box = $("ach");
-    const overlay = $("ach-overlay");
-    box.querySelector(".emoji").textContent = d.emoji || "★";
-    box.querySelector(".title").textContent = d.title || "";
-    box.querySelector(".who").textContent = (d.nick || d.uid) + " — Unlocked";
-    box.querySelector(".desc").textContent = d.desc || "";
-    box.classList.add("show");
-    overlay.classList.add("show");
-    achEffect = { start: performance.now() };
-    if (achTimer) clearTimeout(achTimer);
-    achTimer = setTimeout(() => {
-      box.classList.remove("show");
-      overlay.classList.remove("show");
-    }, 4000);
-  }
-
-  let taskTimer = null;
-  function showTaskScroll(d, isComplete) {
-    const box = $("task-scroll");
-    box.querySelector(".task-who").textContent = (d.nick || d.uid) + (isComplete ? " — Completed" : " — New Task");
-    box.querySelector(".task-title").textContent = d.title || "";
-    box.querySelector(".task-desc").textContent = d.desc || "";
-    box.className = isComplete ? "complete show" : "show";
-    if (taskTimer) clearTimeout(taskTimer);
-    if (isComplete) {
-      taskTimer = setTimeout(() => {
-        box.className = "complete burn";
-        taskTimer = setTimeout(() => { box.className = ""; }, 700);
-      }, 2000);
-    } else {
-      taskTimer = setTimeout(() => { box.className = ""; }, 4000);
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  匿名告白墙
-  // ═══════════════════════════════════════════════════════
-  const anonWall = $("anon-wall");
-  function showAnonBubble(text) {
-    const el = document.createElement("div");
-    el.className = "anon-bubble";
-    el.innerHTML = `<span class="anon-label">ANONYMOUS</span><span class="anon-icon">💌</span>${esc(text)}`;
-    anonWall.appendChild(el);
-    while (anonWall.children.length > 3) anonWall.removeChild(anonWall.firstChild);
     setTimeout(() => {
-      el.style.animation = "anon-fade 0.6s ease-in forwards";
-      setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 600);
-    }, 8000);
-  }
+      el.remove();
+      track.busy = false;
+      _processSAY();
+    }, dur + 100);
+  });
+}
 
-  // ═══════════════════════════════════════════════════════
-  //  Sprint 7: Skill Fusion choreography（5s 演出）
-  // ═══════════════════════════════════════════════════════
-  // 飞符 / 粒子 / 光柱状态
-  const fusionFx = [];   // {kind:"icon"|"particle"|"beam", ...}
-  const pairToast = $("pair-toast");
-  let pairToastTimer = null;
+// ── SAY (anonymous message) ───────────────────────────────
+function showFloat(txt) {
+  const card = Object.assign(document.createElement('div'), { className: 'float-card' });
+  card.innerHTML = `
+    <div class="float-who">Anonymous</div>
+    <div class="float-body">
+      <span class="float-icon">💌</span>
+      <span class="float-msg">${esc(txt)}</span>
+    </div>`;
+  document.getElementById('floatStage').appendChild(card);
+  setTimeout(() => card.remove(), 3700);
+}
 
-  function showPairToast(d) {
-    const omni = d.a_omni || d.b_omni;
-    const aGain = (d.a_gained || []).map(s => SKILL_EMOJI[s] || s).join("") || "—";
-    const bGain = (d.b_gained || []).map(s => SKILL_EMOJI[s] || s).join("") || "—";
-    pairToast.querySelector(".pair-pair").innerHTML =
-      `${esc(d.a_nick)} <span class="arrow">⇄</span> ${esc(d.b_nick)}`;
-    pairToast.querySelector(".pair-gained").innerHTML =
-      `${esc(d.a_nick)} +${aGain}<br>${esc(d.b_nick)} +${bGain}`;
-    const ult = pairToast.querySelector(".pair-ult");
-    const ultMsgs = [];
-    if (d.a_ultimates && d.a_ultimates.length) ultMsgs.push(`${esc(d.a_nick)} ⚡ ${d.a_ultimates.join("/")}`);
-    if (d.b_ultimates && d.b_ultimates.length) ultMsgs.push(`${esc(d.b_nick)} ⚡ ${d.b_ultimates.join("/")}`);
-    if (omni) ultMsgs.push("🌌 OMNISCIENT — all 16 unlocked!");
-    ult.innerHTML = ultMsgs.join("<br>");
-    pairToast.classList.toggle("omni", omni);
-    pairToast.classList.add("show");
-    if (pairToastTimer) clearTimeout(pairToastTimer);
-    pairToastTimer = setTimeout(() => pairToast.classList.remove("show"), omni ? 7000 : 5000);
-  }
+function devSend() {
+  const inp = document.getElementById('devMsgInput');
+  const txt = inp.value.trim();
+  if (!txt) return;
+  inp.value = '';
+  log('💌 ' + txt, 'log-msg');
+  showFloat(txt);      // centre pixel card (single prominent moment)
+  queueSAY(txt);       // top fly-text track (handles concurrency)
+}
+document.getElementById('devSayBtn').onclick = devSend;
+document.getElementById('devMsgInput').onkeydown = e => { if (e.key === 'Enter') devSend(); };
 
-  // 收到 pair_fused → 标记双方进 fusion choreography
-  function triggerFusion(d) {
-    const a = members.get(d.a_uid);
-    const b = members.get(d.b_uid);
-    if (!a || !b) return;
-    // 算中点
-    const mx = (a.x + b.x) / 2;
-    const my = (a.y + b.y) / 2;
-    const start = performance.now();
-    a.fusion = {
-      start, phase: "approach",
-      fromX: a.x, fromY: a.y,
-      toX: mx - 30, toY: my,
-      midX: mx, midY: my,
-      partnerUid: b.uid,
-      gained: d.a_gained || [],
-      ultimates: d.a_ultimates || [],
-      omni: !!d.a_omni,
-    };
-    b.fusion = {
-      start, phase: "approach",
-      fromX: b.x, fromY: b.y,
-      toX: mx + 30, toY: my,
-      midX: mx, midY: my,
-      partnerUid: a.uid,
-      gained: d.b_gained || [],
-      ultimates: d.b_ultimates || [],
-      omni: !!d.b_omni,
-    };
-    a.pairingUntil = 0; b.pairingUntil = 0;
-    // 立即更新两人技能/进度 → chip 行实时反映
-    if (d.a_progress) a.progress = d.a_progress;
-    if (d.b_progress) b.progress = d.b_progress;
-    // 计算新 skill 总集合（在事件里没全发，但 gained ∪ 旧 = 现在）
-    const aNew = new Set([...(a.skills || []), ...(d.a_gained || [])]);
-    const bNew = new Set([...(b.skills || []), ...(d.b_gained || [])]);
-    a.skills = Array.from(aNew);
-    b.skills = Array.from(bNew);
-    if (d.a_omni) a.hasOmni = true;
-    if (d.b_omni) b.hasOmni = true;
-    if (d.a_ultimates) a.ultimates = Array.from(new Set([...(a.ultimates || []), ...d.a_ultimates]));
-    if (d.b_ultimates) b.ultimates = Array.from(new Set([...(b.ultimates || []), ...d.b_ultimates]));
-    // A+ 改进: 谁贡献了 starter，谁的 contributedCount +1（用于 📨 徽章）
-    // a_gained 非空意味着 B 给了 A，b.contributedCount++
-    if ((d.a_gained || []).length > 0) b.contributedCount = (b.contributedCount || 0) + 1;
-    if ((d.b_gained || []).length > 0) a.contributedCount = (a.contributedCount || 0) + 1;
-  }
+// ×5 burst — stress-tests concurrent SAY handling
+const BURST_MSGS = [
+  'love is the answer', 'this is so fun!', 'hi from mist isle 🌫️',
+  'pride forever 🌈',  'making new friends',
+];
+document.getElementById('devBurstBtn').onclick = () => {
+  BURST_MSGS.forEach((m, i) => setTimeout(() => {
+    log('💌 ' + m, 'log-msg');
+    queueSAY(m);
+  }, i * 250));
+};
 
-  // 每帧推进 fusion 位置 + 阶段
-  function updateFusions(t) {
-    const now = performance.now();
-    for (const n of members.values()) {
-      if (!n.fusion) continue;
-      const elapsed = now - n.fusion.start;
-      if (elapsed < FUSION_APPROACH_MS) {
-        n.fusion.phase = "approach";
-        const k = easeOutQuart(elapsed / FUSION_APPROACH_MS);
-        n.x = n.fusion.fromX + (n.fusion.toX - n.fusion.fromX) * k;
-        n.y = n.fusion.fromY + (n.fusion.toY - n.fusion.fromY) * k;
-      } else if (elapsed < FUSION_APPROACH_MS + FUSION_HOLD_MS) {
-        if (n.fusion.phase !== "hold") {
-          n.fusion.phase = "hold";
-          // 第一次进 hold → 触发光柱 + 飞符（只触发一次，由 fusion 标记防重）
-          if (!n.fusion.fxSpawned) {
-            n.fusion.fxSpawned = true;
-            spawnFusionFx(n);
-          }
-        }
-        n.x = n.fusion.toX; n.y = n.fusion.toY;
-      } else if (elapsed < FUSION_APPROACH_MS + FUSION_HOLD_MS + FUSION_BURST_MS) {
-        n.fusion.phase = "burst";
-        // 站位停留在重合处
-        n.x = n.fusion.toX; n.y = n.fusion.toY;
-      } else if (elapsed < FUSION_TOTAL_MS) {
-        // release：从中点缓慢漂回稍随机位置
-        if (n.fusion.phase !== "release") {
-          n.fusion.phase = "release";
-          n.fusion.releaseFromX = n.x;
-          n.fusion.releaseFromY = n.y;
-          n.fusion.releaseToX = n.fusion.midX + (Math.random() - 0.5) * 120;
-          n.fusion.releaseToY = n.fusion.midY + (Math.random() - 0.5) * 40;
-        }
-        const k = (elapsed - FUSION_APPROACH_MS - FUSION_HOLD_MS - FUSION_BURST_MS) / FUSION_RELEASE_MS;
-        n.x = n.fusion.releaseFromX + (n.fusion.releaseToX - n.fusion.releaseFromX) * easeOutQuart(k);
-        n.y = n.fusion.releaseFromY + (n.fusion.releaseToY - n.fusion.releaseFromY) * easeOutQuart(k);
-      } else {
-        // 结束
-        n.fusion = null;
-        n.pop = 1;  // 入场式弹一下
+// ── JUMP effect ───────────────────────────────────────────
+const JUMP_COLORS = ['#FF4444','#FF8833','#FFDD22','#44CC44','#4488FF','#BB44FF'];
+let jumpBursts = 0;
+
+function triggerJump() {
+  // White flash
+  const flash = document.createElement('div');
+  flash.className = 'jump-flash';
+  document.body.appendChild(flash);
+  setTimeout(() => flash.remove(), 600);
+
+  // Canvas particle burst
+  const canvas = document.getElementById('jumpCanvas');
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+  canvas.style.display = 'block';
+  const ctx = canvas.getContext('2d');
+
+  const particles = Array.from({ length: 200 }, () => ({
+    x:  Math.random() * canvas.width,
+    y:  Math.random() * canvas.height * 0.8,
+    vx: (Math.random() - .5) * 5,
+    vy: (Math.random() - .5) * 5 - 2,
+    color: JUMP_COLORS[Math.floor(Math.random() * 6)],
+    opacity: 1,
+  }));
+
+  function frame() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let alive = false;
+    for (const p of particles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.05;
+      p.opacity -= 0.004;
+      if (p.opacity > 0) {
+        alive = true;
+        ctx.globalAlpha = p.opacity;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(Math.round(p.x), Math.round(p.y), 6, 6);
       }
     }
+    ctx.globalAlpha = 1;
+    if (alive) requestAnimationFrame(frame);
+    else { canvas.style.display = 'none'; }
   }
-
-  // 触发飞符 + 光柱 + 粒子
-  function spawnFusionFx(n) {
-    // 1 个光柱（绑在中点，自然衰减）
-    fusionFx.push({
-      kind: "beam",
-      x: n.fusion.midX, y: n.fusion.midY,
-      start: performance.now(),
-      life: FUSION_HOLD_MS + FUSION_BURST_MS,
-    });
-    // 24 粒散落粒子
-    for (let i = 0; i < 24; i++) {
-      const ang = (i / 24) * TAU;
-      fusionFx.push({
-        kind: "particle",
-        x: n.fusion.midX, y: n.fusion.midY,
-        vx: Math.cos(ang) * (1.5 + Math.random() * 2.5),
-        vy: Math.sin(ang) * (1.5 + Math.random() * 2.5) - 0.5,
-        start: performance.now(),
-        life: 1200,
-        hue: 290 + Math.random() * 50,  // pink-violet
-      });
-    }
-    // 飞符：把每个 gained skill 的 emoji 从光柱抛物线飞向 partner（双向）
-    for (const sk of n.fusion.gained) {
-      fusionFx.push({
-        kind: "icon",
-        emoji: SKILL_EMOJI[sk] || "✦",
-        fromX: n.fusion.midX, fromY: n.fusion.midY,
-        toX: n.fusion.toX, toY: n.fusion.toY - 40,
-        start: performance.now() + Math.random() * 200,  // 错峰
-        life: 1100,
-      });
-    }
-  }
-
-  function drawFusionFx(t) {
-    const now = performance.now();
-    for (let i = fusionFx.length - 1; i >= 0; i--) {
-      const fx = fusionFx[i];
-      const age = now - fx.start;
-      if (age < 0) continue;  // 错峰延后开始
-      if (age > fx.life) { fusionFx.splice(i, 1); continue; }
-      const k = age / fx.life;
-      ctx.save();
-      if (fx.kind === "beam") {
-        // 旋转光柱：上下贯穿，淡入淡出
-        const beamH = 200 + 80 * Math.sin(now * 0.006);
-        const alpha = Math.sin(k * Math.PI) * 0.65;
-        ctx.globalAlpha = alpha;
-        const g = ctx.createLinearGradient(fx.x - 30, 0, fx.x + 30, 0);
-        g.addColorStop(0, "rgba(255,180,235,0)");
-        g.addColorStop(0.5, "rgba(255,220,255,0.95)");
-        g.addColorStop(1, "rgba(220,180,255,0)");
-        ctx.fillStyle = g;
-        ctx.fillRect(fx.x - 30, fx.y - beamH / 2, 60, beamH);
-        // 旋转内核
-        ctx.globalAlpha = alpha * 0.7;
-        ctx.translate(fx.x, fx.y);
-        ctx.rotate(now * 0.005);
-        ctx.fillStyle = "rgba(255,255,255,0.95)";
-        for (let r = 0; r < 8; r++) {
-          const a = (r / 8) * TAU;
-          ctx.beginPath();
-          ctx.ellipse(Math.cos(a) * 16, Math.sin(a) * 16, 4, 14, a, 0, TAU);
-          ctx.fill();
-        }
-      } else if (fx.kind === "particle") {
-        const alpha = (1 - k) * 0.85;
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = `hsl(${fx.hue}, 75%, 70%)`;
-        const x = fx.x + fx.vx * age * 0.06;
-        const y = fx.y + fx.vy * age * 0.06 + 0.0008 * age * age;  // 重力
-        ctx.beginPath();
-        ctx.arc(x, y, 3 * (1 - k * 0.5), 0, TAU);
-        ctx.fill();
-      } else if (fx.kind === "icon") {
-        // 抛物线：从中点 → partner 头顶
-        const x = fx.fromX + (fx.toX - fx.fromX) * k;
-        const arc = -Math.sin(k * Math.PI) * 60;   // 拱形
-        const y = fx.fromY + (fx.toY - fx.fromY) * k + arc;
-        const alpha = Math.sin(Math.min(1, k * 1.4) * Math.PI) * 0.95;
-        ctx.globalAlpha = Math.max(0, alpha);
-        ctx.font = `${28 + 8 * Math.sin(k * Math.PI)}px sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(fx.emoji, x, y);
-      }
-      ctx.restore();
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  Vix 问答赛
-  // ═══════════════════════════════════════════════════════
-  const quizPanel = $("quiz-panel");
-  let quizTimerInterval = null;
-  let quizStartedAt = 0;
-  const QUIZ_TIMEOUT = 20;
-
-  function showQuizPanel() {
-    quizPanel.classList.add("show");
-  }
-  function hideQuizPanel() {
-    quizPanel.classList.remove("show");
-    if (quizTimerInterval) { clearInterval(quizTimerInterval); quizTimerInterval = null; }
-  }
-  function setQuizQuestion(round, total, question) {
-    quizPanel.querySelector(".quiz-header").textContent = `🎯 Q${round}/${total}`;
-    quizPanel.querySelector(".quiz-question").textContent = question;
-    quizPanel.querySelector(".quiz-status").textContent = "Use /ans <answer> to answer!";
-    quizStartedAt = performance.now();
-    if (quizTimerInterval) clearInterval(quizTimerInterval);
-    quizTimerInterval = setInterval(() => {
-      const elapsed = (performance.now() - quizStartedAt) / 1000;
-      const left = Math.max(0, QUIZ_TIMEOUT - elapsed);
-      quizPanel.querySelector(".quiz-timer").textContent = `⏱ ${Math.ceil(left)}s`;
-      if (left <= 0 && quizTimerInterval) { clearInterval(quizTimerInterval); quizTimerInterval = null; }
-    }, 200);
-    showQuizPanel();
-  }
-  function setQuizScores(scores) {
-    const el = quizPanel.querySelector(".quiz-scores");
-    const medals = ["🥇", "🥈", "🥉"];
-    el.innerHTML = (scores || []).map((s, i) =>
-      `<div class="score-row"><span class="rank">${medals[i] || (i+1)}</span><span class="name">${esc(s.nick)}</span><span class="pts">${s.score}</span></div>`
-    ).join("");
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  事 件 处 理
-  // ═══════════════════════════════════════════════════════
-  function applySnapshot(d) {
-    members.clear();
-    $("room").textContent = d.room || "hall";
-    totalMessages = d.total_messages || 0;
-    (d.members || []).forEach(m => {
-      const n = spawnNode(m.uid, m.nick);
-      n.born = performance.now() - 2000;
-      n.channel = m.current_channel || "main";
-      n.msgCount = m.msg_count || 0;
-      // Sprint 7: 从 snapshot 恢复技能状态
-      n.skills = Array.isArray(m.skills) ? m.skills.slice() : [];
-      n.ultimates = Array.isArray(m.ultimates) ? m.ultimates.slice() : [];
-      n.hasOmni = !!m.has_omni;
-      n.progress = Array.isArray(m.progress) ? m.progress.slice() : [n.skills.length, 16];
-      // A+ 改进: starter / 贡献排行
-      n.starterSkills = Array.isArray(m.starter_skills) ? m.starter_skills.slice() : [];
-      n.contributedCount = m.contributed_count || 0;
-      if (m.png_b64) {
-        const img = new Image();
-        img.onload = () => { n.img = img; };
-        img.src = "data:image/png;base64," + m.png_b64;
-      }
-    });
-    updateHud();
-    if (d.npc_avatar) {
-      npcImg = new Image();
-      npcImg.src = "data:image/png;base64," + d.npc_avatar;
-    }
-    pushLog(`<span class="sys">◈</span> Snapshot loaded · Online ${members.size}`);
-  }
-
-  function handleEvent(d) {
-    switch (d.type) {
-      case "snapshot":
-        applySnapshot(d);
-        break;
-      case "join": {
-        let n = members.get(d.uid);
-        if (!n) n = spawnNode(d.uid, d.nick);
-        else { n.nick = d.nick || n.nick; n.leaving = 0; }
-        // Sprint 7: 入场带 starter skills
-        if (Array.isArray(d.skills)) n.skills = d.skills.slice();
-        if (Array.isArray(d.progress)) n.progress = d.progress.slice();
-        const wx = n.x + Math.cos(n.phase) * n.drift;
-        const wy = n.y + Math.sin(n.phase * 1.3) * n.drift;
-        spawnJoinBurst(wx, wy);
-        updateHud();
-        pushLog(`<span class="nick">${esc(d.nick || d.uid)}</span> arrived`);
-        break;
-      }
-      case "leave": {
-        const n = members.get(d.uid);
-        if (n) n.leaving = performance.now();
-        pushLog(`<span class="nick">${esc(d.nick || d.uid)}</span> left`);
-        setTimeout(updateHud, 750);
-        break;
-      }
-      case "msg": {
-        if (d.uid === NPC_UID) break;
-        totalMessages++;
-        const n = members.get(d.uid);
-        const ch = d.channel || "main";
-        if (n) {
-          n.channel = ch;
-          n.bubble = { text: d.text, until: performance.now() + 5000, channel: ch };
-          n.pop = 1;
-          n.msgCount = (n.msgCount || 0) + 1;
-        }
-        const chTag = ch !== "main" ? `<span class="sys">#${esc(ch)}</span> ` : "";
-        pushLog(`${chTag}<span class="nick">${esc(d.nick)}</span>: ${esc(d.text)}`);
-        updateHud();
-        break;
-      }
-      case "status":
-        break;
-      case "achievement": {
-        const n = members.get(d.uid);
-        if (n) n.pop = 1;
-        pushLog(`<span class="sys">★</span> <span class="nick">${esc(d.nick || d.uid)}</span> unlocked "${esc(d.title)}"`);
-        showAchievement(d);
-        break;
-      }
-      case "avatar": {
-        const n = members.get(d.uid);
-        if (n && d.png_b64) {
-          n.generating = false;
-          const img = new Image();
-          img.onload = () => { n.img = img; n.pop = 1; };
-          img.src = "data:image/png;base64," + d.png_b64;
-          pushLog(`<span class="sys">◈</span> <span class="nick">${esc(d.nick || d.uid)}</span> new look`);
-        }
-        break;
-      }
-      case "avatar_generating": {
-        const n = members.get(d.uid);
-        if (n) n.generating = true;
-        pushLog(`<span class="sys">◈</span> <span class="nick">${esc(d.nick || d.uid)}</span> generating avatar…`);
-        break;
-      }
-      case "emote": {
-        const EMOTE_LABELS = {
-          bloom: "🌸 Bloom", spark: "✨ Spark", wind: "🍃 Wind", fox: "🦊 Foxfire", rain: "🌈 Rainbow",
-          leaf: "🍂 Leaf", flame: "🔥 Flame", comet: "☄️ Comet",
-          wave: "🌊 Wave", bubble: "🫧 Bubble", mist: "🌫️ Mist", tide: "💧 Tide",
-          star: "⭐ Star", aurora: "🌌 Aurora", lightning: "⚡ Lightning", halo: "💫 Halo",
-          gaia: "🌍 GAIA", solar: "☀️ SOLAR", dragon: "🐉 DRAGON", galaxy: "🌠 GALAXY",
-          omni: "🌌 OMNI",
-        };
-        spawnEmote(d.uid, d.emote);
-        pushLog(`<span class="sys">✦</span> <span class="nick">${esc(d.nick || d.uid)}</span> ${esc(EMOTE_LABELS[d.emote] || d.emote)}`);
-        break;
-      }
-      case "move": {
-        const n = members.get(d.uid);
-        if (n) {
-          n.tiltDx = d.dx || 0;
-          n.tiltDy = d.dy || 0;
-          n.lastTilt = performance.now();
-        }
-        break;
-      }
-      case "npc_ask": {
-        npcBubble = { text: d.text, until: performance.now() + 6000, type: "ask", nick: d.nick };
-        npcAwake = true; npcAwakeUntil = performance.now() + 12000;
-        pushLog(`<span class="sys">❗</span> <span class="nick">${esc(d.nick)}</span> asks Vix: ${esc(d.text)}`);
-        break;
-      }
-      case "npc_reply": {
-        npcBubble = { text: d.text, until: performance.now() + 8000, type: "reply", nick: null };
-        npcAwake = true; npcAwakeUntil = performance.now() + 12000;
-        // 仙灵粒子散落
-        const { x: npcX, y: npcY } = getNpcPos(performance.now());
-        for (let i = 0; i < 12; i++) {
-          pollen.push({
-            x: npcX + (Math.random() - 0.5) * 40,
-            y: npcY + 10 + Math.random() * 20,
-            vx: (Math.random() - 0.5) * 0.6,
-            vy: 0.2 + Math.random() * 0.4,
-            size: 1 + Math.random() * 2,
-            phase: Math.random() * TAU,
-            speed: 0.002 + Math.random() * 0.002,
-            hue: 40 + Math.random() * 15,
-          });
-        }
-        pushLog(`<span class="sys">✨</span> <span class="nick">Vix</span>: ${esc(d.text)}`);
-        break;
-      }
-      case "task_assign": {
-        showTaskScroll(d, false);
-        pushLog(`<span class="sys">📜</span> <span class="nick">${esc(d.nick)}</span> took "${esc(d.title)}"`);
-        break;
-      }
-      case "task_complete": {
-        showTaskScroll(d, true);
-        spawnEmote(d.uid, "ink");
-        pushLog(`<span class="sys">🔥</span> <span class="nick">${esc(d.nick)}</span> completed "${esc(d.title)}"`);
-        break;
-      }
-      case "anon_msg": {
-        showAnonBubble(d.text);
-        pushLog(`<span class="sys">💌</span> <i>anonymous</i>: ${esc(d.text)}`);
-        break;
-      }
-      case "quiz_start": {
-        showQuizPanel();
-        quizPanel.querySelector(".quiz-question").textContent = "Get ready...";
-        quizPanel.querySelector(".quiz-status").textContent = `${esc(d.nick)} started a ${d.rounds}-round quiz!`;
-        setQuizScores([]);
-        pushLog(`<span class="sys">🎯</span> <span class="nick">${esc(d.nick)}</span> started a quiz!`);
-        break;
-      }
-      case "quiz_question": {
-        setQuizQuestion(d.round, d.total, d.question);
-        pushLog(`<span class="sys">📝</span> Q${d.round}: ${esc(d.question)}`);
-        break;
-      }
-      case "quiz_hint": {
-        quizPanel.querySelector(".quiz-status").textContent = `💡 Hint: ${d.hint}`;
-        pushLog(`<span class="sys">💡</span> Hint: ${esc(d.hint)}`);
-        break;
-      }
-      case "quiz_correct": {
-        if (quizTimerInterval) { clearInterval(quizTimerInterval); quizTimerInterval = null; }
-        quizPanel.querySelector(".quiz-timer").textContent = "";
-        quizPanel.querySelector(".quiz-status").textContent = `🎉 ${d.nick} got it in ${d.elapsed}s!`;
-        setQuizScores(d.scores || []);
-        spawnEmote(d.uid, "spark");
-        pushLog(`<span class="sys">🎉</span> <span class="nick">${esc(d.nick)}</span> answered correctly! (${d.elapsed}s)`);
-        break;
-      }
-      case "quiz_wrong": {
-        pushLog(`<span class="sys">❌</span> <span class="nick">${esc(d.nick)}</span> wrong answer`);
-        break;
-      }
-      case "quiz_timeout": {
-        if (quizTimerInterval) { clearInterval(quizTimerInterval); quizTimerInterval = null; }
-        quizPanel.querySelector(".quiz-timer").textContent = "";
-        quizPanel.querySelector(".quiz-status").textContent = `⏰ Time's up! Answer: ${d.answer}`;
-        pushLog(`<span class="sys">⏰</span> Time's up! Answer: ${esc(d.answer)}`);
-        break;
-      }
-      case "quiz_end": {
-        if (quizTimerInterval) { clearInterval(quizTimerInterval); quizTimerInterval = null; }
-        setQuizScores(d.scores || []);
-        const winner = (d.scores || [])[0];
-        quizPanel.querySelector(".quiz-header").textContent = "🏆 Quiz Over!";
-        quizPanel.querySelector(".quiz-question").textContent = winner ? `Winner: ${winner.nick} (${winner.score}pts)` : "No one scored!";
-        quizPanel.querySelector(".quiz-timer").textContent = "";
-        quizPanel.querySelector(".quiz-status").textContent = "Use /quiz to start another!";
-        pushLog(`<span class="sys">🏆</span> Quiz ended!` + (winner ? ` Winner: <span class="nick">${esc(winner.nick)}</span>` : ""));
-        // 8s 后自动隐藏计分板
-        setTimeout(hideQuizPanel, 8000);
-        break;
-      }
-      // Sprint 7: 双机配对意向 → 头顶 ❤️ + 心圈
-      case "pair_intent": {
-        const n = members.get(d.uid);
-        if (n) {
-          n.pairingUntil = performance.now() + (d.window_s ? d.window_s * 1000 : PAIR_WINDOW_MS);
-        }
-        pushLog(`<span class="sys">💗</span> <span class="nick">${esc(d.nick || d.uid)}</span> wants to pair…`);
-        break;
-      }
-      // Sprint 7: 配对成功 → 5s 融合演出 + 顶部 toast
-      case "pair_fused": {
-        triggerFusion(d);
-        showPairToast(d);
-        const aGain = (d.a_gained || []).length;
-        const bGain = (d.b_gained || []).length;
-        const ultMsg = ((d.a_ultimates || []).concat(d.b_ultimates || []).length) ? " · ⚡ ULT!" : "";
-        const omniMsg = (d.a_omni || d.b_omni) ? " · 🌌 OMNISCIENT!" : "";
-        pushLog(`<span class="sys">⇄</span> <span class="nick">${esc(d.a_nick)}</span> ⇄ <span class="nick">${esc(d.b_nick)}</span> fused (+${aGain}/+${bGain})${ultMsg}${omniMsg}`);
-        // Sprint 7 Phase 7.3: fusion 5s 演出完后自动放大招/omni
-        const ultimateMap = { nature: "gaia", fire: "solar", water: "dragon", light: "galaxy" };
-        const delayMs = FUSION_TOTAL_MS + 300;
-        const fireUlt = (uid, elements) => {
-          for (const el of elements || []) {
-            const sk = ultimateMap[el];
-            if (sk) setTimeout(() => spawnEmote(uid, sk), delayMs);
-          }
-        };
-        fireUlt(d.a_uid, d.a_ultimates);
-        fireUlt(d.b_uid, d.b_ultimates);
-        if (d.a_omni) setTimeout(() => spawnEmote(d.a_uid, "omni"), delayMs);
-        if (d.b_omni) setTimeout(() => spawnEmote(d.b_uid, "omni"), delayMs);
-        break;
-      }
-      case "ping":
-        break;
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  WebSocket
-  // ═══════════════════════════════════════════════════════
-  const connEl = $("conn");
-  let ws = null, retry = 0, retryTimer = null;
-
-  function wsURL() {
-    const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    return `${proto}//${location.host}/ws`;
-  }
-
-  function connect() {
-    setConn("bad", "connecting…");
-    ws = new WebSocket(wsURL());
-    ws.onopen = () => {
-      retry = 0;
-      setConn("ok", "connected");
-      pushLog(`<span class="sys">◈</span> Connected · LOITER`);
-    };
-    ws.onmessage = ev => {
-      try { handleEvent(JSON.parse(ev.data)); } catch (e) { /* ignore */ }
-    };
-    ws.onclose = () => {
-      setConn("bad", "reconnecting…");
-      scheduleReconnect();
-    };
-    ws.onerror = () => { try { ws.close(); } catch (e) {} };
-  }
-
-  function scheduleReconnect() {
-    if (retryTimer) return;
-    const delay = Math.min(1000 * Math.pow(1.6, retry), 8000);
-    retry++;
-    retryTimer = setTimeout(() => { retryTimer = null; connect(); }, delay);
-  }
-
-  function setConn(cls, text) {
-    connEl.className = cls;
-    connEl.textContent = text;
-  }
-
-  // ═══════════════════════════════════════════════════════
-  //  启 动
-  // ═══════════════════════════════════════════════════════
-  resize();
-  initPollen();
-  initWisps();
-  updateHud();
   requestAnimationFrame(frame);
-  connect();
+  log('🎉 JUMP — 全场彩虹粒子爆炸！', 'log-event');
+  // increment burst counter in status bar
+  jumpBursts++;
+  document.getElementById('jumpCount').textContent = jumpBursts;
+}
+document.getElementById('devJumpBtn').onclick = () => adminStage('jump');
+
+// ── Phase 3c: PHOTO mode（合照定格）─────────────────────
+// 进入后隐藏运营 chrome（admin 面板 + chat + DEV 入口），叠彩虹边框 + SMILE 横幅 + 白光闪，
+// 方便大家对着大屏合照。Esc / 再点 PHOTO 退出（admin 端广播 unphoto 同步全场）。
+(function injectPhotoCSS() {
+  const s = document.createElement('style');
+  s.textContent = `
+    body.photo-mode #devToggle,
+    body.photo-mode #devPanel,
+    body.photo-mode #devOverlay { display: none !important; }
+    body.photo-mode.photo-fullscreen .map-area {
+      width: 100vw !important;
+      left: 0 !important;
+      right: auto !important;
+      transform: none !important;
+    }
+    body.photo-mode.photo-fullscreen #chatPanel,
+    body.photo-mode.photo-fullscreen #chatTab { display: none !important; }
+    #photoFrame { position: fixed; inset: 0; z-index: 9000; pointer-events: none;
+      border: 14px solid transparent;
+      border-image: linear-gradient(135deg,#e84d3c,#ff9f43,#f9ca24,#6ab04c,#4a6fa5,#5f27cd) 1;
+      box-shadow: inset 0 0 70px rgba(0,0,0,.35); }
+    #photoFrame .photo-banner { position: absolute; top: 26px; left: 50%; transform: translateX(-50%);
+      font-size: 26px; font-weight: 800; letter-spacing: .12em; color: #fff;
+      text-shadow: 0 2px 14px rgba(0,0,0,.6); animation: photoBannerFade 2.6s ease forwards; }
+    @keyframes photoBannerFade { 0%{opacity:0;transform:translateX(-50%) scale(.8);}
+      14%{opacity:1;transform:translateX(-50%) scale(1);} 82%{opacity:1;} 100%{opacity:0;} }
+  `;
+  document.head.appendChild(s);
 })();
+let photoActive = false;
+let photoPrevChatClosed = false;
+const PHOTO_KEEP_CHAT = new URLSearchParams(location.search).get('photoChat') === '1';
+function enterPhotoMode() {
+  if (photoActive) return;
+  photoActive = true;
+  document.body.classList.add('photo-mode');
+  if (!PHOTO_KEEP_CHAT) {
+    photoPrevChatClosed = chatPanel.classList.contains('closed');
+    chatPanel.classList.add('closed');
+    mapArea.classList.add('chat-closed');
+    document.body.classList.add('photo-fullscreen');
+  }
+  const flash = document.createElement('div');
+  flash.className = 'jump-flash';
+  document.body.appendChild(flash);
+  setTimeout(() => flash.remove(), 600);
+  const frame = document.createElement('div');
+  frame.id = 'photoFrame';
+  frame.innerHTML = '<div class="photo-banner">📸 SMILE!</div>';
+  document.body.appendChild(frame);
+  log('📸 Phase 3c — 合照定格（Esc 退出）', 'log-event');
+}
+function exitPhotoMode() {
+  if (!photoActive) return;
+  photoActive = false;
+  document.body.classList.remove('photo-mode');
+  document.body.classList.remove('photo-fullscreen');
+  if (!PHOTO_KEEP_CHAT) {
+    chatPanel.classList.toggle('closed', photoPrevChatClosed);
+    mapArea.classList.toggle('chat-closed', photoPrevChatClosed);
+  }
+  document.getElementById('photoFrame')?.remove();
+}
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && photoActive) {
+    if (adminToken) adminStage('unphoto'); else exitPhotoMode();
+  }
+});
+
+// ── HI rainbow arc ────────────────────────────────────────
+function triggerHI(charA, charB) {
+  const W = 2752, H = 1536;
+  const ax = parseFloat(charA.el.style.left) / 100 * W;
+  const ay = parseFloat(charA.el.style.top)  / 100 * H;
+  const bx = parseFloat(charB.el.style.left) / 100 * W;
+  const by = parseFloat(charB.el.style.top)  / 100 * H;
+
+  const midX = (ax + bx) / 2;
+  const midY = (ay + by) / 2;
+  const dist = Math.hypot(bx - ax, by - ay);
+  const cpY  = midY - dist * 0.55;
+
+  const ns    = 'http://www.w3.org/2000/svg';
+  const layer = document.getElementById('hiArcLayer');
+
+  // ── Pixel-art arc: 30 solid square dots along the bezier curve ──
+  const PRIDE   = ['#FF4444','#FF8833','#FFDD22','#44CC44','#4488FF','#BB44FF'];
+  const DOT     = 24;
+  const N       = Math.max(6, Math.round(dist / DOT));  // dots fill the arc gap-free
+  const DRAW_MS = Math.min(1200, 400 + N * 18);         // draw speed scales with length
+
+  // Quadratic bezier point at t
+  const qbez = (t) => {
+    const mt = 1 - t;
+    return { x: mt*mt*ax + 2*mt*t*midX + t*t*bx,
+             y: mt*mt*ay + 2*mt*t*cpY  + t*t*by };
+  };
+
+  const dots = [];
+  for (let i = 0; i < N; i++) {
+    const p   = qbez(i / (N - 1));
+    const col = PRIDE[Math.min(Math.floor(i / (N / 6)), 5)];
+    const r   = document.createElementNS(ns, 'rect');
+    r.setAttribute('x',      p.x - DOT / 2);
+    r.setAttribute('y',      p.y - DOT / 2);
+    r.setAttribute('width',  DOT);
+    r.setAttribute('height', DOT);
+    r.setAttribute('fill',   col);
+    r.style.opacity = '0';
+    layer.appendChild(r);
+    dots.push(r);
+  }
+
+  // Appear one-by-one (pixel-by-pixel draw)
+  dots.forEach((d, i) =>
+    setTimeout(() => { d.style.opacity = '1'; }, i * (DRAW_MS / N))
+  );
+
+  // Hold then snap-fade together (steps = pixel feel)
+  setTimeout(() => {
+    dots.forEach(d => {
+      d.style.transition = 'opacity 0.3s steps(3)';
+      d.style.opacity = '0';
+    });
+    setTimeout(() => dots.forEach(d => d.remove()), 400);
+  }, DRAW_MS + 1800);
+
+  // Particles above each character's head
+  [charA, charB].forEach(ch => showParticle(ch.el));
+
+  // "..." speech bubbles above each character
+  [charA, charB].forEach(ch => {
+    const b = document.createElement('div');
+    b.className = 'hi-bubble';
+    b.textContent = '...';
+    b.style.left = ch.el.style.left;
+    b.style.top  = `calc(${ch.el.style.top} - 11%)`;
+    document.querySelector('.map-wrap').appendChild(b);
+    setTimeout(() => {
+      b.style.transition = 'opacity 0.3s steps(3)';
+      b.style.opacity = '0';
+      setTimeout(() => b.remove(), 400);
+    }, 2200);
+  });
+
+  // Chat log
+  log(`🌸 ${charA.name} 🤝 ${charB.name}`, 'log-event');
+}
+
+const PARTICLE_TYPES = ['sparkle','heart','leaf','butterfly'];
+
+function showParticle(anchorEl) {
+  const type = PARTICLE_TYPES[Math.floor(Math.random() * 4)];
+  const p = document.createElement('div');
+  p.className = `map-particle ${type}`;
+  p.style.left = anchorEl.style.left;
+  // Position at head level: char sprite is 64px, label ~20px above feet
+  p.style.top = `calc(${anchorEl.style.top} - 11%)`;
+  document.querySelector('.map-wrap').appendChild(p);
+  // 2 animation iterations: sparkle 2.4s, heart/butterfly 3.2s, leaf 3.6s
+  const dur = { sparkle: 2500, heart: 3300, leaf: 3700, butterfly: 3300 };
+  setTimeout(() => p.remove(), (dur[type] || 3200) + 100);
+}
+
+// 指定粒子类型，挂在某个 WS 小人 record 上（/sig + 近距交换用）
+function triggerParticle(rec, type) {
+  if (!rec || !rec.el || !type) return;
+  const p = document.createElement('div');
+  p.className = `map-particle ${type}`;
+  p.style.left = rec.el.style.left;
+  p.style.top = `calc(${rec.el.style.top} - 11%)`;
+  document.querySelector('.map-wrap').appendChild(p);
+  const dur = { sparkle: 2500, heart: 3300, leaf: 3700, butterfly: 3300 };
+  setTimeout(() => p.remove(), (dur[type] || 3200) + 100);
+}
+
+document.getElementById('devHiBtn').onclick = () => {  if (activeChars.length < 2) {
+    log('⚠ Need 2+ players for HI', 'log-event'); return;
+  }
+  // Pick 2 different characters at random
+  const idx = [...Array(activeChars.length).keys()]
+    .sort(() => Math.random() - .5).slice(0, 2);
+  triggerHI(activeChars[idx[0]], activeChars[idx[1]]);
+};
+
+// ── Phase 3 preview buttons ───────────────────────────────
+// 🌑 DIM: slow fade-in darkness + pixel message for Phase 3a
+let dimOverlay = null;
+function triggerDim() {
+  if (dimOverlay) return;   // 已暗下则不重复
+  dimOverlay = document.createElement('div');
+  dimOverlay.className = 'dim-overlay';
+  dimOverlay.innerHTML = `
+    <div class="dim-message">
+      <span class="dim-msg-line1">YOUR JOURNEY IS COMPLETE</span>
+      <span class="dim-msg-line2">PICK UP YOUR M5</span>
+      <span class="dim-msg-line3">your personal story is waiting for you</span>
+    </div>`;
+  document.body.appendChild(dimOverlay);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    dimOverlay.classList.add('active');
+  }));
+  log('🌑 Phase 3a — 大屏暗下', 'log-conn');
+}
+function clearDim() {
+  if (!dimOverlay) return;
+  dimOverlay.classList.remove('active');
+  setTimeout(() => { dimOverlay?.remove(); dimOverlay = null; }, 3200);
+}
+document.getElementById('devDimBtn').onclick = () => adminStage(dimOverlay ? 'undim' : 'dim');
+// ── Phase 3b: story dots ──────────────────────────────────
+const ISLE_COLORS = [
+  '#b83828','#c87838','#b89820',  // Ember, Hearth, Spark
+  '#3a6020','#7080b0','#2e8880',  // Grove, Mist, Tide
+];
+// Redistributed positions (% of map) for ocean + center characters
+const OCEAN_POS = [
+  [18,28],[25,38],[14,48],[30,22],[42,18],   // upper ocean
+  [18,68],[28,76],[14,62],[35,72],[22,58],   // left/lower ocean
+  [68,30],[75,22],[82,38],[72,18],[62,28],   // right ocean
+];
+const CENTER_POS = [[46,46],[50,50],[54,48],[48,52],[52,44]];
+
+const FAKE_READINGS = [
+  n=>`${n} arrived as themselves.\nLeft pieces of their color\nbehind. Came back richer.`,
+  n=>`You moved like someone who\nhad been here before.\nYou hadn't. That's the gift.`,
+  n=>`${n} asked one question\nnobody answered.\nIt's still open.`,
+  n=>`You collected every color\nexcept the one you started\nwith. You already had it.`,
+  n=>`Quiet presence, loud color.\nToday ${n} was both\nat once.`,
+  n=>`You found 3 people who speak\nyour language. They live on\ndifferent islands now.`,
+];
+
+function _dotIslandColor(idx) {
+  if (idx < 9)  return ISLE_COLORS[0];
+  if (idx < 18) return ISLE_COLORS[1];
+  if (idx < 26) return ISLE_COLORS[2];
+  if (idx < 35) return ISLE_COLORS[3];
+  if (idx < 43) return ISLE_COLORS[4];
+  return ISLE_COLORS[5];
+}
+
+function _fakeSpectrum(idx) {
+  // First color = home island, 4 more from other islands
+  const home = _dotIslandColor(idx);
+  const others = ISLE_COLORS.filter(c => c !== home);
+  const picks = [home];
+  for (let i = 0; i < 4; i++) picks.push(others[(idx * 3 + i * 7) % others.length]);
+  return picks;
+}
+
+let storyDotsActive = false;
+const _storyDots = [];
+
+function showStoryDots() {
+  if (storyDotsActive) { clearStoryDots(); return; }
+  if (!activeChars.length) { log('⚠ Add players first', 'log-event'); return; }
+  storyDotsActive = true;
+  const mw = document.querySelector('.map-wrap');
+  const n  = activeChars.length;
+
+  activeChars.forEach((ch, i) => {
+    const ratio = i / Math.max(n - 1, 1);
+    let px, py;
+
+    if (ratio < 0.55) {
+      // Stay on home island (near current position)
+      px = parseFloat(ch.el.style.left) + (Math.random() - .5) * 2;
+      py = parseFloat(ch.el.style.top)  + (Math.random() - .5) * 2;
+    } else if (ratio < 0.82) {
+      // Drift to ocean — bridge people
+      const op = OCEAN_POS[(i - Math.floor(n*.55)) % OCEAN_POS.length];
+      px = op[0] + (Math.random() - .5) * 3;
+      py = op[1] + (Math.random() - .5) * 3;
+    } else {
+      // Float to centre — rainbow hearts
+      const cp = CENTER_POS[(i - Math.floor(n*.82)) % CENTER_POS.length];
+      px = cp[0] + (Math.random() - .5) * 4;
+      py = cp[1] + (Math.random() - .5) * 4;
+    }
+
+    const dot = document.createElement('div');
+    dot.className = 'story-dot';
+    dot.style.left = px.toFixed(1) + '%';
+    dot.style.top  = py.toFixed(1) + '%';
+    dot.style.background = _dotIslandColor(i);
+    dot.style.animationDelay = (i * 40) + 'ms';
+    mw.appendChild(dot);
+    _storyDots.push(dot);
+
+    // Hover: show story card
+    let card = null;
+    dot.addEventListener('mouseenter', () => {
+      // 优先用服务端 reading_reveal 下发的真实数据，dev mock 时回落 FAKE
+      const spec = (ch.spectrum && ch.spectrum.length)
+                 ? ch.spectrum.filter(Boolean)
+                 : _fakeSpectrum(i);
+      const hasReal = ch.reading && ch.reading.length;
+      const title = ch.readingTitle || '';
+      const titleCn = ch.readingTitleCn || '';
+      card = document.createElement('div');
+      card.className = 'story-card';
+
+      const specHTML = spec.map(c =>
+        `<div class="sc-color" style="background:${c}"></div>`).join('');
+
+      // 文本走 textContent 防 XSS（reading 来自 AI / nick 来自用户）
+      const safe = s => String(s || '').replace(/[<>&]/g, '');
+      const titleLine = title ? `<div class="sc-name" style="font-size:7px;color:#f8e1a0;opacity:.8">${safe(title)}${titleCn ? ' / ' + safe(titleCn) : ''}</div>` : '';
+      card.innerHTML = `<div class="sc-name">${safe(ch.name)}</div>${titleLine}<div class="sc-spectrum">${specHTML}</div>`;
+
+      // Build bilingual reading: EN block → divider → CN block
+      if (hasReal) {
+        const lines = ch.reading || [];
+        const linesCn = ch.readingCn || [];
+        const enEl = document.createElement('div'); enEl.className = 'sc-text';
+        enEl.textContent = lines.filter(Boolean).join('\n');
+        enEl.style.whiteSpace = 'pre-wrap';
+        card.appendChild(enEl);
+        if (linesCn.some(Boolean)) {
+          const divider = document.createElement('div');
+          divider.style.cssText = 'border-top:1px solid rgba(248,225,160,.25);margin:6px 0';
+          card.appendChild(divider);
+          const cnEl = document.createElement('div'); cnEl.className = 'sc-text';
+          cnEl.textContent = linesCn.filter(Boolean).join('\n');
+          cnEl.style.whiteSpace = 'pre-wrap';
+          cnEl.style.color = '#e0d0f8';
+          card.appendChild(cnEl);
+        }
+      } else {
+        const textEl = document.createElement('div'); textEl.className = 'sc-text';
+        textEl.textContent = FAKE_READINGS[i % FAKE_READINGS.length](ch.name);
+        textEl.style.whiteSpace = 'pre-wrap';
+        card.appendChild(textEl);
+      }
+
+      // Position near dot, keep within map bounds
+      const r   = mw.getBoundingClientRect();
+      const dx  = px / 100 * r.width;
+      const dy  = py / 100 * r.height;
+      const cx  = Math.max(4, Math.min(r.width  - 228, dx - 105));
+      const cy  = Math.max(4, Math.min(r.height - 160, dy - 150));
+      card.style.left = cx + 'px';
+      card.style.top  = cy + 'px';
+      mw.appendChild(card);
+    });
+    dot.addEventListener('mouseleave', () => { card?.remove(); card = null; });
+  });
+
+  triggerPhase3Climax();   // 饱和度跳升 + 中央彩虹弧 + 白光闪
+  log('✨ Phase 3b — story dots appear', 'log-event');
+}
+
+function clearStoryDots() {
+  _storyDots.forEach(d => d.remove());
+  _storyDots.length = 0;
+  storyDotsActive = false;
+  clearPhase3Climax();
+}
+
+// ── P3b 视觉高潮：饱和度跳升 + 中央彩虹弧 + 白光闪（Designer PRD §8.3）──
+function triggerPhase3Climax() {
+  // 1) 6 岛饱和度跳升
+  const img = document.querySelector('.map-img');
+  if (img) img.classList.add('phase3b-active');
+  // 2) 中央升起彩虹弧（复用 #hiArcLayer，viewBox 2752×1536）
+  renderCentralRainbowArc();
+  // 3) 全场白光闪一下（复用 .jump-flash）
+  const flash = document.createElement('div');
+  flash.className = 'jump-flash';
+  document.body.appendChild(flash);
+  setTimeout(() => flash.remove(), 350);
+}
+
+function clearPhase3Climax() {
+  const img = document.querySelector('.map-img');
+  if (img) img.classList.remove('phase3b-active');
+  document.getElementById('centralArc')?.remove();
+}
+
+function renderCentralRainbowArc() {
+  const svg = document.getElementById('hiArcLayer');
+  if (!svg) return;
+  document.getElementById('centralArc')?.remove();
+  // 地图中央上空的半圆拱（viewBox 2752×1536；中心 cx，弧顶在地图中上部）
+  const cx = 1376, cy = 980, rx = 760, ry = 560;
+  // 从左到右画一道上凸半圆（A 大弧）
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  const d = `M ${cx - rx} ${cy} A ${rx} ${ry} 0 0 1 ${cx + rx} ${cy}`;
+  path.setAttribute('d', d);
+  path.setAttribute('id', 'centralArc');
+  path.setAttribute('stroke-width', '34');
+  // stroke-dash 动画：dasharray = 弧长，dashoffset 从满到 0
+  const len = Math.PI * (rx + ry) / 2;  // 椭圆半周长近似
+  path.style.strokeDasharray = len;
+  path.style.setProperty('--arc-len', len);
+  svg.appendChild(path);
+  requestAnimationFrame(() => path.classList.add('draw'));
+}
+
+document.getElementById('devRevealBtn').onclick = () => adminStage(storyDotsActive ? 'unreveal' : 'reveal');
+// 📸 PHOTO: Phase 3c 合照定格（广播进/退同步全场）
+document.getElementById('devPhotoBtn').onclick = () => adminStage(photoActive ? 'unphoto' : 'photo');
+
+// ── Fake character sprites — port of App.tsx renderCharacter ─
+// Character drawn on a 24×24 logical grid, identical to the dress-up system.
+
+// ── Character sprites — real LimeZu carry sprites ────────
+const CHAR_NAMES = [
+  'ALICE','BOB','CAI','DANI','EVAN','FEI','GIO','HAO','IVY','JAY',
+  'KAI','LEI','MIA','NIX','ORI','PAX','RAY','SAL','TAO','UNA',
+  'VIC','WEI','XIN','YUE','ZAI','AMY','BEN','CHU','DEV','ELI',
+  'FAN','GUS','HUI','IAN','JUN','KEN','LIN','MAX','NAO','OWI',
+  'PIX','QUI','REN','SHI','TIM','URI','VAL','WIN','XIA','YUI',
+];
+const SKINS = ['skin-light','skin-med','skin-dark'];
+
+const SPAWN_POOL = [
+  // Ember Isle (red) — 9 spots
+  [260,300],[370,235],[210,360],[310,180],[440,260],[190,250],[380,340],[280,400],[350,150],
+  // Hearth Isle (orange) — 9 spots
+  [720,680],[860,620],[800,780],[950,730],[750,840],[870,720],[680,740],[960,650],[830,860],
+  // Spark Isle (yellow) — 8 spots
+  [200,1030],[315,1140],[165,1210],[270,1090],[390,1170],[140,1100],[460,1080],[230,1200],
+  // Grove Isle (green) — 9 spots
+  [1265,580],[1440,670],[1330,810],[1520,720],[1200,700],[1380,850],[1480,600],[1240,850],[1560,780],
+  // Mist Isle (lavender) — 8 spots
+  [2060,185],[2200,240],[2310,170],[2080,330],[2230,150],[2380,240],[2150,330],[2290,290],
+  // Tide Isle (teal) — 8 spots
+  [2135,1080],[2265,1170],[2075,1250],[2380,1120],[2200,1270],[2060,1140],[2310,1230],[2440,1200],
+];
+
+let activeChars = [];
+const usedNames  = new Set();
+
+function _pickName() {
+  const avail = CHAR_NAMES.filter(n => !usedNames.has(n));
+  const name  = avail.length
+    ? avail[Math.floor(Math.random() * avail.length)]
+    : CHAR_NAMES[activeChars.length % CHAR_NAMES.length];
+  usedNames.add(name);
+  return name;
+}
+
+// Drag support: moves the anchor (feet position) to follow cursor
+function _makeDraggable(anchor) {
+  let dragging = false;
+  const wrap = anchor.querySelector('.char-wrap');
+
+  wrap.addEventListener('mousedown', e => {
+    dragging = true;
+    e.preventDefault();
+    anchor.style.zIndex = 250;
+  });
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const mw = document.querySelector('.map-wrap');
+    const r  = mw.getBoundingClientRect();
+    anchor.style.left = Math.max(0, Math.min(100, (e.clientX - r.left)  / r.width  * 100)).toFixed(2) + '%';
+    anchor.style.top  = Math.max(0, Math.min(100, (e.clientY - r.top)   / r.height * 100)).toFixed(2) + '%';
+  });
+  window.addEventListener('mouseup', () => {
+    if (dragging) { dragging = false; anchor.style.zIndex = ''; }
+  });
+}
+
+function addCharacter() {
+  // WS 连上后默认禁用 dev 出生（避免与 island-aware 出生点混用，review 小龙虾 #2）；
+  // WS 连上后默认禁用 dev 出生（避免与 island-aware 出生点混用，review 小龙虾 #2）；
+  // 但 ?admin=1 显式 opt-in 时放行 —— admin 面板就是用来在线上页面 mock 测试（如 P4b story-dots）
+  if (!ADMIN_ENABLED && typeof _ws !== 'undefined' && _ws && _ws.readyState === 1) return;
+  if (activeChars.length >= SPAWN_POOL.length) return;
+  const [sx, sy] = SPAWN_POOL[activeChars.length];
+  const name = _pickName();
+  const skin = SKINS[activeChars.length % 3];
+
+  const anchor = document.createElement('div');
+  anchor.className = 'char-anchor';
+  anchor.style.left = (sx / 2752 * 100).toFixed(2) + '%';
+  anchor.style.top  = (sy / 1536 * 100).toFixed(2) + '%';
+  anchor.innerHTML  = `
+    <div class="char-wrap">
+      <div class="char-label">${name}</div>
+      <div class="char-sprite ${skin}"></div>
+    </div>`;
+  document.querySelector('.map-wrap').appendChild(anchor);
+  _makeDraggable(anchor);
+  activeChars.push({ el: anchor, name });
+  log(`★ ${name} arrived`, 'log-join');
+}
+
+function removeCharacter() {
+  if (!activeChars.length) return;
+  const { el, name } = activeChars.pop();
+  usedNames.delete(name);
+  el.remove();
+}
+
+// ── Online count ──────────────────────────────────────────
+let onlineN = 2;
+function setOnline(n) {
+  onlineN = Math.max(0, Math.min(SPAWN_POOL.length, n));
+  document.getElementById('onlineCount').textContent  = onlineN;
+  document.getElementById('devOnlineVal').textContent = onlineN;
+  while (activeChars.length < onlineN) addCharacter();
+  while (activeChars.length > onlineN) removeCharacter();
+}
+document.getElementById('devOnlineDec').onclick = () => setOnline(onlineN - 1);
+document.getElementById('devOnlineInc').onclick = () => setOnline(onlineN + 1);
+
+// ════════════════════════════════════════════════════════════
+//  v2 WebSocket client — server-driven Islands of Color
+//  契约: docs/mqtt-protocol.md（WS server→大屏 events）
+//  dev panel 仍可用作离线 mock；服务器连上后由 WS 事件驱动。
+// ════════════════════════════════════════════════════════════
+
+// spectrum chip 样式（5 格色块跟随小人）
+(() => {
+  const s = document.createElement('style');
+  s.textContent = `
+    .ws-spectrum { display:flex; gap:1px; justify-content:center; margin-top:2px; }
+    .ws-spectrum i { width:6px; height:6px; display:inline-block;
+      border:1px solid #8888; image-rendering:pixelated; }`;
+  document.head.appendChild(s);
+})();
+
+// 岛屿 idx → 出生点（SPAWN_POOL 子集，按岛分组）。
+// 池布局: Ember 0-8, Hearth 9-17, Spark 18-25, Grove 26-34, Mist 35-42, Tide 43-50。
+// 服务端 island idx: EMBER0 HEARTH1 SPARK2 GROVE3 TIDE4 MIST5。
+const ISLAND_SPOTS = {
+  0: SPAWN_POOL.slice(0, 9),    // EMBER
+  1: SPAWN_POOL.slice(9, 18),   // HEARTH
+  2: SPAWN_POOL.slice(18, 26),  // SPARK
+  3: SPAWN_POOL.slice(26, 35),  // GROVE
+  4: SPAWN_POOL.slice(43, 51),  // TIDE
+  5: SPAWN_POOL.slice(35, 43),  // MIST
+};
+const _skinByUid = uid => SKINS[[...uid].reduce((a, c) => a + c.charCodeAt(0), 0) % SKINS.length];
+const PARTICLE_BY_IDX = ['sparkle', 'heart', 'leaf', 'butterfly'];
+
+function _skinByAvatar(uid, avatar) {
+  if (!avatar || !Array.isArray(avatar.color)) return _skinByUid(uid);
+  const bodyShape = Number(avatar.shape?.[0] ?? 0);
+  const bodyColor = Number(avatar.color[0] ?? 0);
+  return SKINS[Math.abs(bodyShape * 7 + bodyColor) % SKINS.length];
+}
+
+function _avatarFilter(avatar) {
+  if (!avatar || (!Array.isArray(avatar.color) && !Array.isArray(avatar.shape))) return 'none';
+  // 大屏只有 3 张 carry sprite，无法逐 shape 渲染 → 把全部 layer（shape+color）哈希成
+  // 稳定的视觉差异（色相/饱和/明度），确保任何 layer（含发型/衣服 shape）改动大屏都看得出。
+  const shape = Array.isArray(avatar.shape) ? avatar.shape : [];
+  const color = Array.isArray(avatar.color) ? avatar.color : [];
+  let h = 0;
+  for (let i = 0; i < 5; i++) {
+    h = (h * 31 + (Number(shape[i] ?? 0) | 0)) | 0;
+    h = (h * 31 + (Number(color[i] ?? 0) | 0)) | 0;
+  }
+  const hue = Math.abs(h) % 360;
+  const sat = (1 + (Math.abs(h >> 3) % 6) * 0.12).toFixed(2);
+  const bri = (0.85 + (Math.abs(h >> 7) % 5) * 0.07).toFixed(2);
+  return `hue-rotate(${hue}deg) saturate(${sat}) brightness(${bri})`;
+}
+
+function wsApplyAvatar(rec, avatar) {
+  if (!rec || !rec.el) return;
+  rec.avatar = avatar || null;
+  const sprite = rec.el.querySelector('.char-sprite');
+  if (!sprite) return;
+  // Use server-composited avatar PNG if avatar data available
+  const uid = rec.uid;
+  if (uid) {
+    let img = sprite.querySelector('img');
+    if (!img) {
+      img = document.createElement('img');
+      sprite.innerHTML = '';
+      sprite.classList.remove('skin-light', 'skin-med', 'skin-dark');
+      sprite.style.background = 'none';
+      sprite.appendChild(img);
+    }
+    img.src = `/avatar/${uid}.png?t=${Date.now()}`;
+  }
+}
+
+function wsPlayAction(rec, ms = 1400) {
+  if (!rec || !rec.el) return;
+  const sprite = rec.el.querySelector('.char-sprite');
+  if (!sprite) return;
+  sprite.classList.add('acting');
+  clearTimeout(rec._actTimer);
+  rec._actTimer = setTimeout(() => sprite.classList.remove('acting'), ms);
+}
+
+const _islandUse = { 0:0, 1:0, 2:0, 3:0, 4:0, 5:0 };
+function _spotForIsland(island) {
+  const spots = ISLAND_SPOTS[island] || SPAWN_POOL;
+  const idx = (_islandUse[island] || 0) % spots.length;
+  if (island in _islandUse) _islandUse[island]++;
+  return spots[idx];
+}
+
+const wsChars = new Map();   // uid -> char record { el, name, uid, island }
+
+// 服务端逻辑画布（room.py LOGICAL_CANVAS_W/H）→ 大屏百分比。
+// 服务端是坐标权威：snapshot/move 带的 x/y 直接映射，避免重连漂移（review Codex #3）。
+const SRV_CANVAS_W = 1920, SRV_CANVAS_H = 1080;
+function _srvToPct(x, y) {
+  return [
+    Math.max(0, Math.min(100, x / SRV_CANVAS_W * 100)),
+    Math.max(0, Math.min(100, y / SRV_CANVAS_H * 100)),
+  ];
+}
+
+function wsSpawn(uid, nick, island, x, y, avatar = null) {
+  let rec = wsChars.get(uid);
+  if (!rec) {
+    const anchor = document.createElement('div');
+    anchor.className = 'char-anchor';
+    const wrap = document.createElement('div');
+    wrap.className = 'char-wrap';
+    const label = document.createElement('div');
+    label.className = 'char-label';
+    label.textContent = nick;                 // textContent 防 XSS（review Codex #2）
+    const sprite = document.createElement('div');
+    sprite.className = `char-sprite ${_skinByAvatar(uid, avatar)}`;
+    wrap.appendChild(label);
+    wrap.appendChild(sprite);
+    anchor.appendChild(wrap);
+    // 未分配岛屿(island<0) → 暂放地图中心
+    anchor.style.left = (1376 / 2752 * 100).toFixed(2) + '%';
+    anchor.style.top  = (768 / 1536 * 100).toFixed(2) + '%';
+    document.querySelector('.map-wrap').appendChild(anchor);
+    _makeDraggable(anchor);
+    rec = { el: anchor, name: nick, uid, island: -99, avatar: null, sigParticle: -1 };
+    wsChars.set(uid, rec);
+    activeChars.push(rec);   // 让 triggerHI / showStoryDots 也能用到 WS 小人
+  }
+  rec.name = nick;
+  rec.el.querySelector('.char-label').textContent = nick;
+  wsApplyAvatar(rec, avatar || rec.avatar);
+  // 服务端坐标权威：已分岛(island>=0)且带 x/y 就直接用；未分岛留在中心（review Codex #3）
+  if (typeof island === 'number' && island >= 0 &&
+      typeof x === 'number' && typeof y === 'number') {
+    const [px, py] = _srvToPct(x, y);
+    rec.el.style.left = px.toFixed(2) + '%';
+    rec.el.style.top  = py.toFixed(2) + '%';
+    rec.island = island;
+  } else if (typeof island === 'number' && island !== rec.island) {
+    rec.island = island;
+    if (island >= 0) {
+      const [sx, sy] = _spotForIsland(island);
+      rec.el.style.left = (sx / 2752 * 100).toFixed(2) + '%';
+      rec.el.style.top  = (sy / 1536 * 100).toFixed(2) + '%';
+    }
+  }
+  return rec;
+}
+
+function wsRemove(uid) {
+  const rec = wsChars.get(uid);
+  if (!rec) return;
+  rec.el.remove();
+  wsChars.delete(uid);
+  const i = activeChars.indexOf(rec);
+  if (i >= 0) activeChars.splice(i, 1);
+}
+
+function wsClear() {
+  wsChars.forEach(r => {
+    r.el.remove();
+    const i = activeChars.indexOf(r);
+    if (i >= 0) activeChars.splice(i, 1);
+  });
+  wsChars.clear();
+  Object.keys(_islandUse).forEach(k => _islandUse[k] = 0);
+}
+
+function _setOnlineCount(n) {
+  document.getElementById('onlineCount').textContent = n;
+  document.getElementById('devOnlineVal').textContent = n;
+}
+
+// 5 格 spectrum 色块跟随小人
+function wsRenderSpectrum(rec, spectrum) {
+  if (!spectrum) return;
+  rec.spectrum = spectrum;   // 写回 record，供 showStoryDots 读真实光谱（review Codex）
+  let bar = rec.el.querySelector('.ws-spectrum');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.className = 'ws-spectrum';
+    rec.el.querySelector('.char-wrap').appendChild(bar);
+  }
+  bar.innerHTML = spectrum.map(c =>
+    `<i style="background:${c || 'transparent'};border-color:${c || '#8888'}"></i>`).join('');
+}
+
+// ── WS 事件分发 ──
+function handleWsEvent(ev) {
+  switch (ev.type) {
+    case 'snapshot':
+      wsClear();
+      (ev.members || []).forEach(m => {
+        const rec = wsSpawn(m.uid, m.nick, m.island, m.x, m.y, m.avatar || null);
+        rec.sigParticle = Number(m.sig_particle ?? -1);
+        if (m.spectrum && m.spectrum.length) wsRenderSpectrum(rec, m.spectrum);
+        // 重连恢复已生成的 reading → story card 不掉回 fake（review Codex）
+        if (m.reading) { rec.reading = m.reading.lines || []; rec.readingCn = m.reading.lines_cn || []; rec.readingTitle = m.reading.title || ''; rec.readingTitleCn = m.reading.title_cn || ''; }
+      });
+      _setOnlineCount(ev.count != null ? ev.count : wsChars.size);
+      log(`◈ Snapshot · ${ev.count != null ? ev.count : wsChars.size} online`, 'log-conn');
+      break;
+    case 'join':
+      wsSpawn(ev.uid, ev.nick, ev.island, null, null, ev.avatar || null);
+      _setOnlineCount(ev.count);
+      log(`★ ${ev.nick} arrived`, 'log-join');
+      break;
+    case 'leave':
+      wsRemove(ev.uid);
+      _setOnlineCount(ev.count);
+      break;
+    case 'island_assign': {
+      const rec = wsSpawn(ev.uid, ev.nick, ev.island, ev.x, ev.y, ev.avatar || null);
+      if (ev.spectrum) wsRenderSpectrum(rec, ev.spectrum);
+      log(`🏝 ${ev.nick} → island ${ev.island}`, 'log-event');
+      break;
+    }
+    case 'hi_arc': {
+      const a = wsChars.get(ev.a), b = wsChars.get(ev.b);
+      if (a && b) {
+        wsPlayAction(a);
+        wsPlayAction(b);
+        triggerHI(a, b);
+      }
+      // 握手即换色 → 两端 spectrum 立即刷新（服务端权威态）
+      if (a && ev.a_spectrum) wsRenderSpectrum(a, ev.a_spectrum);
+      if (b && ev.b_spectrum) wsRenderSpectrum(b, ev.b_spectrum);
+      hiConnects++;
+      document.getElementById('connectCount').textContent = hiConnects;
+      break;
+    }
+    case 'jump': {
+      const jRec = wsChars.get(ev.uid);
+      if (jRec && jRec.el) {
+        const sp = jRec.el.querySelector('.char-sprite');
+        if (sp) { sp.classList.remove('bouncing'); void sp.offsetWidth; sp.classList.add('bouncing'); }
+      }
+      break;
+    }
+    case 'jump_burst':
+      triggerJump();   // 自带 #jumpCount 递增
+      log(`🎉 JUMP burst (${ev.count || ''})`, 'log-event');
+      break;
+    case 'anon_msg':
+      queueSAY(ev.text);   // Designer 顶部飞字轨
+      showFloat(ev.text);  // 中央像素卡
+      log(`💌 ${ev.text}`, 'log-msg');
+      break;
+    case 'reading_reveal': {
+      // Phase 3 个人 reading 生成 → 存到 char record，供 story card hover 展示真实数据
+      const rec = wsChars.get(ev.uid);
+      if (rec) {
+        rec.reading = ev.lines || [];
+        rec.readingCn = ev.lines_cn || [];
+        rec.readingTitle = ev.title || '';
+        rec.readingTitleCn = ev.title_cn || '';
+        if (ev.spectrum) wsRenderSpectrum(rec, ev.spectrum);   // 内部已写回 rec.spectrum
+      }
+      log(`📖 ${ev.nick} reading: ${ev.title || ''}`, 'log-event');
+      break;
+    }
+    case 'profile_update': {
+      const rec = wsChars.get(ev.uid);
+      if (rec) {
+        rec.name = ev.nick || rec.name;
+        rec.el.querySelector('.char-label').textContent = rec.name;
+        wsApplyAvatar(rec, ev.avatar || rec.avatar);
+        rec.sigParticle = Number(ev.sig_particle ?? rec.sigParticle ?? -1);
+      }
+      break;
+    }
+    case 'sig_cast': {
+      const rec = wsChars.get(ev.uid);
+      if (rec) {
+        rec.sigParticle = Number(ev.particle ?? rec.sigParticle ?? -1);
+        wsPlayAction(rec, 1200);
+        const pType = PARTICLE_BY_IDX[rec.sigParticle];
+        if (pType) triggerParticle(rec, pType);
+      }
+      break;
+    }
+    case 'sig_copy': {
+      // 近距同时 shake → 复制对方降临 sig（不是交换）：双方播动作 + 各自显示复制后的粒子
+      const a = wsChars.get(ev.a), b = wsChars.get(ev.b);
+      if (a) {
+        a.sigParticle = Number(ev.a_particle ?? a.sigParticle ?? -1);
+        wsPlayAction(a, 1200);
+        const pa = PARTICLE_BY_IDX[a.sigParticle];
+        if (pa) triggerParticle(a, pa);
+      }
+      if (b) {
+        b.sigParticle = Number(ev.b_particle ?? b.sigParticle ?? -1);
+        wsPlayAction(b, 1200);
+        const pb = PARTICLE_BY_IDX[b.sigParticle];
+        if (pb) triggerParticle(b, pb);
+      }
+      if (a && b) log(`✨ ${a.name} → ${b.name} sig copy`, 'log-event');
+      break;
+    }
+    case 'phase_change':
+      log(`◆ Phase ${ev.phase}`, 'log-conn');
+      // Phase 3 → 大屏暗下引导看设备（host 也可用 dev 面板手动 DIM/REVEAL）
+      if (ev.phase === 3) triggerDim();
+      break;
+    case 'stage':
+      // Admin 控场广播 → 所有页面（含裸 URL 大屏）同步执行；幂等，重复广播安全。
+      switch (ev.action) {
+        case 'dim':       triggerDim(); break;
+        case 'undim':     clearDim(); break;
+        case 'reveal':    if (!storyDotsActive) showStoryDots(); break;
+        case 'unreveal':  if (storyDotsActive) clearStoryDots(); break;
+        case 'jump':      triggerJump(); break;
+        case 'photo':     enterPhotoMode(); break;
+        case 'unphoto':   exitPhotoMode(); break;
+      }
+      break;
+    case 'move': {
+      const rec = wsChars.get(ev.uid);
+      if (rec) {
+        const L = parseFloat(rec.el.style.left) || 50;
+        const T = parseFloat(rec.el.style.top) || 50;
+        // 步长对齐服务端 MOVE_SERVER_STEP=50px（x/1920, y/1080），避免两边漂移（review 小龙虾 #1）
+        rec.el.style.left = Math.max(0, Math.min(100, L + (ev.dx || 0) * (50 / SRV_CANVAS_W * 100))).toFixed(2) + '%';
+        rec.el.style.top  = Math.max(0, Math.min(100, T + (ev.dy || 0) * (50 / SRV_CANVAS_H * 100))).toFixed(2) + '%';
+      }
+      break;
+    }
+    case 'status':
+      _setOnlineCount(ev.count);
+      break;
+    case 'ping':
+      break;
+  }
+}
+
+// ── 连接（带指数退避重连）──
+let hiConnects = 0;   // HI 握手计数 → #connectCount
+let _ws = null, _wsRetry = 0;
+function connectWs() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  let sock;
+  try { sock = new WebSocket(`${proto}://${location.host}/ws`); }
+  catch (e) { return _scheduleReconnect(); }
+  _ws = sock;
+  sock.onopen = () => { _wsRetry = 0; log('⬡ Connected · LOITER', 'log-conn'); };
+  sock.onmessage = e => { try { handleWsEvent(JSON.parse(e.data)); } catch (_) {} };
+  sock.onclose = () => { log('⚠ WS closed — retrying', 'log-conn'); _scheduleReconnect(); };
+  sock.onerror = () => sock.close();
+}
+function _scheduleReconnect() {
+  _wsRetry = Math.min(_wsRetry + 1, 6);
+  setTimeout(connectWs, _wsRetry * 1000);
+}
+connectWs();
 </script>
 </body>
 </html>

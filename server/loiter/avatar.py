@@ -1,112 +1,80 @@
-"""AI 头像生成 — Azure AI Foundry gpt-image-1.5 → 大屏彩色 PNG + Cardputer 16×16 1-bit bitmap。
+"""Avatar compositor — combines 5 sprite layers into a 32×64 PNG for the big screen."""
+import json
+import hashlib
+from pathlib import Path
+from io import BytesIO
+from PIL import Image
 
-凭据从环境变量读取（与 dream-painter skill 对齐，绝不 hardcode）：
-    AZURE_OPENAI_API_KEY        必填
-    AZURE_OPENAI_ENDPOINT       必填，如 https://xxx.cognitiveservices.azure.com/
-    AZURE_OPENAI_DEPLOYMENT     默认 gpt-image-1.5
-    AZURE_OPENAI_API_VERSION    默认 2025-04-01-preview
-
-Fail-closed：未配置 key/endpoint → ENABLED=False，头像功能静默禁用，不崩。
-"""
-from __future__ import annotations
-
-import base64
-import io
-import logging
-import os
-from dataclasses import dataclass
-
-log = logging.getLogger("loiter.avatar")
-
-AZURE_KEY = os.getenv("AZURE_OPENAI_API_KEY", "").strip()
-AZURE_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "").strip()
-AZURE_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-image-1.5").strip()
-AZURE_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2025-04-01-preview").strip()
-
-# 空 = 拒绝，不给鉴权字段留 fallback 默认值
-ENABLED = bool(AZURE_KEY and AZURE_ENDPOINT)
-
-BIG = 256   # 大屏 PNG 边长（彩色）
-SMALL = 16  # Cardputer bitmap 边长（1-bit）
+SPRITE_DIR = Path(__file__).parent / "sprite_layers"
+MANIFEST = None
+_cache: dict[str, bytes] = {}   # avatar_key → PNG bytes
 
 
-@dataclass
-class AvatarResult:
-    uid: str
-    png_b64: str     # 大屏：BIG×BIG 彩色 PNG，base64
-    bitmap_b64: str  # Cardputer：SMALL×SMALL 1-bit，32 bytes，base64
-    w: int
-    h: int
+def _load_manifest():
+    global MANIFEST
+    if MANIFEST is None:
+        with open(SPRITE_DIR / "manifest.json") as f:
+            MANIFEST = json.load(f)
+    return MANIFEST
 
 
-def _build_prompt(keywords: list[str]) -> str:
-    kw = ", ".join(k.strip() for k in keywords if k and k.strip()) or "a friendly robot"
-    return (
-        f"Cute chibi Q版 character of {kw}, "
-        "big head small body, 2.5-head proportion, adorable and expressive, "
-        "simple clean lines, Chinese traditional costume (汉服/古风) elements, "
-        "transparent background, NO background, isolated character, "
-        "centered composition, 3/4 view, full body visible, "
-        "game avatar icon style, clean edges, high contrast, "
-        "kawaii meets Chinese fantasy aesthetic"
-    )
+LAYER_ORDER = ["body", "eyes", "outfit", "hair", "accessory"]
 
 
-def _call_azure(prompt: str, timeout: float = 90.0) -> bytes:
-    import httpx
-
-    base = AZURE_ENDPOINT.rstrip("/")
-    url = (
-        f"{base}/openai/deployments/{AZURE_DEPLOYMENT}/images/generations"
-        f"?api-version={AZURE_API_VERSION}"
-    )
-    body = {
-        "prompt": prompt,
-        "n": 1,
-        "size": "1024x1024",
-        "quality": "medium",
-        "output_format": "png",
-        "background": "transparent",
-    }
-    resp = httpx.post(
-        url,
-        headers={"Api-Key": AZURE_KEY, "Content-Type": "application/json"},
-        json=body,
-        timeout=timeout,
-    )
-    resp.raise_for_status()
-    b64 = resp.json()["data"][0]["b64_json"]
-    return base64.b64decode(b64)
+def _variant_filename(layer: str, shape_idx: int, color_idx: int) -> str | None:
+    """Get the PNG filename for a given layer/shape/color index."""
+    manifest = _load_manifest()
+    shapes = manifest.get(layer, [])
+    if shape_idx < 0 or shape_idx >= len(shapes):
+        return None
+    shape_info = shapes[shape_idx]
+    name = shape_info["name"]
+    n_variants = shape_info["variants"]
+    if n_variants == 0:
+        return None
+    cidx = color_idx % n_variants
+    return f"{layer}_{name}_v{cidx}.png"
 
 
-def _to_outputs(png: bytes) -> tuple[str, str]:
-    """原始 PNG → (大屏彩色 PNG base64, Cardputer 16×16 1-bit base64)。"""
-    from PIL import Image, ImageOps
+def compose_avatar(shape: list[int], color: list[int]) -> bytes:
+    """Compose 5 layers into a 32×64 RGBA PNG. Returns PNG bytes (cached)."""
+    key = f"{shape}:{color}"
+    if key in _cache:
+        return _cache[key]
 
-    src = Image.open(io.BytesIO(png))
+    result = Image.new("RGBA", (32, 64), (0, 0, 0, 0))
 
-    # 大屏：BIG×BIG 彩色 PNG（保留 RGBA 透明通道）
-    color = src.convert("RGBA").resize((BIG, BIG), Image.LANCZOS)
-    buf = io.BytesIO()
-    color.save(buf, "PNG", optimize=True)
-    png_b64 = base64.b64encode(buf.getvalue()).decode()
+    for li, layer in enumerate(LAYER_ORDER):
+        si = shape[li] if li < len(shape) else 0
+        ci = color[li] if li < len(color) else 0
 
-    # Cardputer：灰度 → 16×16 → Floyd–Steinberg 抖动到 1-bit
-    # 暗背景 + 亮主体：无需反色，亮主体自然→高灰度值→bit1（Cardputer 亮前景）。
-    # tobytes()：每行 ceil(16/8)=2 字节、MSB 在前，共 32 bytes。
-    gray = src.convert("L").resize((SMALL, SMALL), Image.LANCZOS)
-    mono = gray.convert("1")
-    bitmap_b64 = base64.b64encode(mono.tobytes()).decode()  # 32 bytes
+        # hair/accessory shape=0 means "none" → skip
+        if layer in ("hair", "accessory") and si == 0:
+            continue
 
-    return png_b64, bitmap_b64
+        # For hair/accessory, shape index in manifest is shifted by -1 (no "none" entry in PNGs)
+        manifest_si = si
+        if layer in ("hair", "accessory"):
+            manifest_si = si - 1  # shape 0 = none (skipped above), shape 1 = first real
+
+        fname = _variant_filename(layer, manifest_si, ci)
+        if fname is None:
+            continue
+        fpath = SPRITE_DIR / fname
+        if not fpath.exists():
+            continue
+
+        layer_img = Image.open(fpath).convert("RGBA")
+        result = Image.alpha_composite(result, layer_img)
+
+    buf = BytesIO()
+    result.save(buf, format="PNG", optimize=True)
+    png_bytes = buf.getvalue()
+    _cache[key] = png_bytes
+    return png_bytes
 
 
-def generate(uid: str, keywords: list[str]) -> AvatarResult:
-    """同步生成（在线程池里调用，会阻塞数十秒）。失败抛异常由调用方处理。"""
-    if not ENABLED:
-        raise RuntimeError("avatar disabled: AZURE_OPENAI_API_KEY/ENDPOINT not set")
-    prompt = _build_prompt(keywords)
-    log.info("avatar gen uid=%s prompt=%s", uid, prompt[:80])
-    png = _call_azure(prompt)
-    png_b64, bitmap_b64 = _to_outputs(png)
-    return AvatarResult(uid=uid, png_b64=png_b64, bitmap_b64=bitmap_b64, w=SMALL, h=SMALL)
+def avatar_cache_key(shape: list[int], color: list[int]) -> str:
+    """Stable ETag for HTTP caching."""
+    raw = f"{shape}:{color}".encode()
+    return hashlib.md5(raw).hexdigest()[:12]

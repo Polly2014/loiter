@@ -14,6 +14,9 @@ avatar = [
     "pillow>=10.4",
     "httpx>=0.27",
 ]
+dev = [
+    "websocket-client>=1.8",
+]
 
 [tool.uv]
 package = false
