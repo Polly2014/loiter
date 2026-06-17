@@ -32,17 +32,34 @@
 
 ## Quick Start
 
+### Flash firmware (first time, USB required)
+
 ```bash
-# --- 真机端 ---
-cd firmware && pio run -e loiter -t upload   # 烧 Cardputer（默认连 mqtt.polly.wang 公网）
+# Option A: With PlatformIO (recommended for developers)
+cd firmware && pio run -e islands -t upload
 
-# --- 服务端（云端模式）---
-# 已跑在 Azure VM 20.51.201.85，访问 https://loiter.polly.wang
-# 本地开发时切回 firmware/src/config.h MQTT_HOST=127.0.0.1，
-# 再 `brew services start mosquitto` + `cd server && uv run uvicorn loiter.main:app`
+# Option B: With esptool only (no PlatformIO needed)
+pip install esptool
+# Download loiter-v2.0.0.bin from GitHub Releases
+esptool.py --chip esp32s3 --port /dev/cu.usbmodem* write_flash 0x10000 loiter-v2.0.0.bin
+```
 
-# --- 火线推固件 ---
-scripts/publish_ota.sh 0.3.0    # 全场所有在线设备 OTA 升级
+### After first flash
+
+Subsequent firmware updates can be pushed wirelessly via OTA:
+```bash
+scripts/publish_ota.sh 2.1.0    # All online devices upgrade over-the-air
+```
+
+### Server (already deployed)
+
+Live at <https://loiter.polly.wang> — no local setup needed for participants.
+
+For local development:
+```bash
+cd server && uv run uvicorn loiter.main:app --host 0.0.0.0 --port 8099
+# + brew services start mosquitto
+# + firmware/src/config.h: MQTT_HOST = your LAN IP
 ```
 
 ## Reviewers
