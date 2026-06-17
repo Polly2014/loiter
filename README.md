@@ -2,10 +2,12 @@
 
 > 卡片机社交厅 · A pocket-sized social lobby for hardware hackers.
 
-**Status**: � **LIVE** at <https://loiter.polly.wang> · Sprint 7 Skill Fusion + Phase 7.6 OTA 上线 (2026-06-08)
+**Status**: 🟢 **LIVE** at <https://loiter.polly.wang> · **v2 Islands of Color** (GLEAM Pride workshop, 2026-06-14~)
+
+![Islands of Color — Big Screen](screenshot.jpg)
 
 **Loiter** 是一套"口袋级"虚拟社交厅引擎，跑在 [M5Stack Cardputer-Adv](https://docs.m5stack.com/en/core/Cardputer%20Adv) 上。
-首个部署实例 **"GLEAM Hall"** 用于公司 GLEAM 组织的线下活动；引擎本身可被任意 hackathon / 年会 / 读书会复用。
+当前形态 **Islands of Color** 是一个 75 分钟的 Pride Month workshop：16 人各持一台 M5，走完换装→选岛→跨岛 HI 握手→AI 个人 reading 的三幕故事弧，大屏实时渲染 6 座岛屿地图 + 跨海彩虹弧 + 集体 JUMP。
 
 ```
  ┌─────────────────────┐
