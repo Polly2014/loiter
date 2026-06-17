@@ -1682,24 +1682,10 @@ function showStoryDots() {
   const n  = activeChars.length;
 
   activeChars.forEach((ch, i) => {
-    const ratio = i / Math.max(n - 1, 1);
     let px, py;
-
-    if (ratio < 0.55) {
-      // Stay on home island (near current position)
-      px = parseFloat(ch.el.style.left) + (Math.random() - .5) * 2;
-      py = parseFloat(ch.el.style.top)  + (Math.random() - .5) * 2;
-    } else if (ratio < 0.82) {
-      // Drift to ocean — bridge people
-      const op = OCEAN_POS[(i - Math.floor(n*.55)) % OCEAN_POS.length];
-      px = op[0] + (Math.random() - .5) * 3;
-      py = op[1] + (Math.random() - .5) * 3;
-    } else {
-      // Float to centre — rainbow hearts
-      const cp = CENTER_POS[(i - Math.floor(n*.82)) % CENTER_POS.length];
-      px = cp[0] + (Math.random() - .5) * 4;
-      py = cp[1] + (Math.random() - .5) * 4;
-    }
+    // Dot always near character position (hover target must be findable)
+    px = parseFloat(ch.el.style.left) + (Math.random() - .5) * 2;
+    py = parseFloat(ch.el.style.top)  + (Math.random() - .5) * 2;
 
     const dot = document.createElement('div');
     dot.className = 'story-dot';
