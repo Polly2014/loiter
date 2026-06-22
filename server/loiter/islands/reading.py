@@ -10,7 +10,7 @@
   - island      自我认领（你是谁）
   - spectrum    你跟哪些异色的人 say hi 了（你遇见了谁 / 接触了多少种多元）
   - hi_count    你多主动（社交广度）
-  - quiz_answers 你性格上的原始倾向（独处 vs 凑热闹）
+  - seed        v3 烧录时 baked 的非敏感性格种子（参与者自由文本的蒸馏，替代原 quiz 倾向）
 
 输出：{title(英文身份标签), title_cn(中文副标题≤6字), core_cn(核心句≤12字),
        lines[9](9 行英文，设备 P3-03 三页×3 行), lines_cn[9](9 行中文≤12字/行)} —— 双语。
@@ -78,18 +78,17 @@ def _spectrum_summary(spectrum_colors: list[str], home_color: str) -> str:
 
 
 def _build_user_prompt(nick: str, island_idx: int, spectrum_colors: list[str],
-                       hi_count: int, quiz_answers: list[int]) -> str:
+                       hi_count: int, seed: str) -> str:
     isle = ISLANDS[island_idx] if 0 <= island_idx < len(ISLANDS) else ISLANDS[2]
     spec_line = _spectrum_summary(spectrum_colors, isle.color)
-    # quiz 三题：每题 0/1/2 三选项，粗略映射性格倾向（仅供 AI 参考，不展示）
-    tendency = "leans toward people/home" if quiz_answers and quiz_answers[0] == 0 else (
-        "leans toward new places" if quiz_answers and quiz_answers[0] == 1 else "leans toward quiet/solo")
+    # v3：seed = 参与者烧录时写的一段话，agent 蒸馏成的非敏感性格描述（仅供 AI 参考，不展示）
+    seed_line = seed.strip() if isinstance(seed, str) and seed.strip() else "(not provided)"
     return (
         f"Name: {nick}\n"
         f"Home island: {isle.name} ({isle.biome}; {isle.traits})\n"
         f"Journey: {spec_line}\n"
         f"Said HI to {hi_count} {'person' if hi_count == 1 else 'people'} today\n"
-        f"Personality tendency (from their quiz): {tendency}\n\n"
+        f"Personality seed (distilled from what they wrote at the flashing station): {seed_line}\n\n"
         f"Write {nick}'s 'who you became today'."
     )
 
@@ -200,9 +199,10 @@ def _parse(text: str) -> dict | None:
 
 
 def generate_reading(nick: str, island_idx: int, spectrum_colors: list[str],
-                     hi_count: int, quiz_answers: list[int]) -> dict:
+                     hi_count: int, seed: str) -> dict:
     """同步生成 reading（阻塞，需在线程池里跑）。返回 {title, lines[9], title_cn, core_cn, lines_cn[9]}。
 
+    `seed` = v3 烧录时 baked 的非敏感性格种子（参与者自由文本的蒸馏）。
     失败 → 按岛 fallback。永不抛异常（单人失败不该阻塞 Phase 3）。
     """
     if not ENABLED:
@@ -213,7 +213,7 @@ def generate_reading(nick: str, island_idx: int, spectrum_colors: list[str],
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": _build_user_prompt(
-            nick, island_idx, spectrum_colors, hi_count, quiz_answers)},
+            nick, island_idx, spectrum_colors, hi_count, seed)},
     ]
     payload = {"model": MODEL, "messages": messages, "max_tokens": 700, "temperature": 0.9}
 
@@ -230,3 +230,67 @@ def generate_reading(nick: str, island_idx: int, spectrum_colors: list[str],
         except Exception:
             log.warning("reading call failed (attempt %d)", attempt, exc_info=True)
     return _fallback(island_idx)
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Phase-1 岛屿 reason —— profile 创建时预生成的「为什么是这座岛」文艺双语短句。
+# 把用户原文 + 岛屿一起喂 CopilotX；失败回落按岛静态模板。
+# ─────────────────────────────────────────────────────────────────────────
+ISLAND_REASON_FALLBACK: dict[int, tuple[str, str]] = {
+    0: ("There's a fierce, living warmth in you — EMBER claimed you.", "你心里有团炽烈的火，火山岛认领了你。"),
+    1: ("You hold space for others, gently — HEARTH took you in.", "你温柔地为别人留出位置，暖村岛收下了你。"),
+    2: ("Curious and restless, you chase the light — SPARK is yours.", "你好奇又不安分，追着光跑，草原岛属于你。"),
+    3: ("Rooted and calm, you grow toward quiet — GROVE called you home.", "你扎根而沉静，向安静生长，森林岛唤你回家。"),
+    4: ("Open and flowing, you touch every shore — TIDE carried you.", "你开阔而流动，碰过每片岸，海洋岛载着你。"),
+    5: ("Dreamy and deep, you see the unseen — MIST drew you in.", "你梦幻而深邃，看见别人看不见的，雾峰岛把你引来。"),
+}
+
+_REASON_SYSTEM = (
+    "You are a warm, literary observer at a Pride workshop called 'Islands of Color'. "
+    "A person wrote a few free words; they were placed on one of six color-islands. "
+    "Write a short, literary, warm bilingual reason why this island fits THEM — "
+    "weave in a hint of what they wrote, never quote it verbatim. "
+    "Keep it Pride-positive and gentle; if their text is off/empty, lean on the island's spirit. "
+    "Respond ONLY with JSON, no fences, exactly: "
+    '{"reason_en": "one English sentence, <=90 chars", "reason_cn": "一句中文，<=24 字"}'
+)
+
+_REASON_EN_MAX = 90
+_REASON_CN_MAX = 24
+
+
+def island_reason_fallback(island_idx: int) -> tuple[str, str]:
+    return ISLAND_REASON_FALLBACK.get(island_idx if 0 <= island_idx < 6 else 2, ISLAND_REASON_FALLBACK[2])
+
+
+def generate_island_reason(text: str, island_idx: int) -> tuple[str, str]:
+    """文艺双语「为什么是这座岛」。失败 → 按岛静态模板。永不抛。"""
+    if not ENABLED:
+        return island_reason_fallback(island_idx)
+    isle = ISLANDS[island_idx] if 0 <= island_idx < len(ISLANDS) else ISLANDS[2]
+    user = (
+        f"They wrote: {(text or '').strip()[:400] or '(nothing)'}\n"
+        f"Island: {isle.name} ({isle.biome}; {isle.traits})\n"
+        f"Write their 'why this island' reason."
+    )
+    payload = {
+        "model": MODEL,
+        "messages": [{"role": "system", "content": _REASON_SYSTEM},
+                     {"role": "user", "content": user}],
+        "max_tokens": 200, "temperature": 0.9,
+    }
+    import httpx
+    for attempt in range(RETRIES + 1):
+        try:
+            resp = httpx.post(ENDPOINT, headers={"X-Client-Id": "loiter"}, json=payload, timeout=TIMEOUT)
+            resp.raise_for_status()
+            raw = resp.json()["choices"][0]["message"]["content"].strip()
+            raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.MULTILINE).strip()
+            obj = json.loads(raw)
+            en = str(obj.get("reason_en", "")).strip()[:_REASON_EN_MAX]
+            cn = str(obj.get("reason_cn", "")).strip()[:_REASON_CN_MAX]
+            if en and cn:
+                return en, cn
+        except Exception:
+            log.warning("island reason call failed (attempt %d)", attempt, exc_info=True)
+    return island_reason_fallback(island_idx)

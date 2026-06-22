@@ -40,6 +40,8 @@ secrets/
 config.local.*
 # 固件本地配置含 WiFi 密码 → 只提交 config.h.example
 firmware/src/config.h
+# 每位参与者烧录时由 loiter-flash skill 生成（含个性化文案）→ 不提交
+firmware/src/user_profile.h
 
 # AI 头像生成缓存
 avatars/

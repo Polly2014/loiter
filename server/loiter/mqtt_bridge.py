@@ -2,7 +2,7 @@
 
 v2 · Islands of Color。
 
-传输层（沿用 v1 已验证资产）：join / leave / move / status / sys·ota + WS fanout。
+传输层（沿用 v1 已验证资产）：join / leave / move / status + WS fanout。
 玩法层（v2 新）：island / hi / jump / anon / phase / reading。
 
 paho 的回调跑在自己的网络线程里，通过 asyncio.run_coroutine_threadsafe
@@ -24,6 +24,7 @@ import paho.mqtt.client as mqtt
 
 from . import config
 from .islands import HiEngine, JumpAggregator, assign_island, generate_reading
+from .islands.assignment import ISLANDS
 from .room import Room, now_ms
 from .ws import WSManager
 
@@ -79,6 +80,7 @@ class MqttBridge:
             # 传输层
             (config.topic("join"), 1),
             (config.topic("profile"), 1),
+            (config.topic("profile", "request"), 1),   # C→S 设备拉 island+reason（Reset 重取）
             (config.topic("leave"), 1),
             (config.topic("move"), 0),
             # 玩法层 v2
@@ -108,7 +110,7 @@ class MqttBridge:
             if kind == "join":
                 self._handle_join(data)
             elif kind == "profile":
-                self._handle_profile(data)
+                (self._handle_profile_request if sub == "request" else self._handle_profile)(data)
             elif kind == "leave":
                 self._handle_leave(data)
             elif kind == "move":
@@ -183,6 +185,93 @@ class MqttBridge:
             "ts": now_ms(),
         })
 
+    def _emit_island_assign(self, m) -> None:
+        """大屏：小人登岛（服务端位置权威，携 spectrum/坐标）。quiz_done 与 v3 join 共用。"""
+        self._emit({
+            "type": "island_assign",
+            "uid": m.uid, "nick": m.nick,
+            "island": m.island, "island_color": m.island_color,
+            "spectrum": m.spectrum.as_list() if m.spectrum else [],
+            "avatar": m.avatar,
+            "sig_particle": m.sig_particle,
+            "sig_action": m.sig_action,
+            "x": round(m.x, 1), "y": round(m.y, 1),
+            "ts": now_ms(),
+        })
+
+    @staticmethod
+    def _sanitize_seed(raw: str) -> str:
+        """profile.text —— 剖控制字符 + 截断（仅用作 reading prompt context，不上屏）。"""
+        s = "".join(c for c in str(raw or "") if ord(c) >= 32)
+        return s[:400].strip()
+
+    def _push_island(self, m) -> None:
+        """S→C 把岛屿 + 文艺 reason 推给设备（Phase-1 揭晓）。fresh join 发 + profile/request 拉。
+
+        reason 异步生成：member 落定时可能还空 → **每次 push 前从 store 取最新**
+        （修 Codex P1：早 join 拿空 reason；P2：profile/request 重取最新）。
+        """
+        if m.profile_id:
+            from .profile_store import store
+            prof = store.get(m.profile_id)
+            if prof:
+                if prof.get("reason_en"):
+                    m.reason_en = prof["reason_en"]
+                if prof.get("reason_cn"):
+                    m.reason_cn = prof["reason_cn"]
+        name = ISLANDS[m.island].name if 0 <= m.island < len(ISLANDS) else ""
+        self.client.publish(
+            config.topic("island", m.uid),
+            json.dumps({"island": m.island, "color": m.island_color, "name": name,
+                        "reason_en": m.reason_en, "reason_cn": m.reason_cn}),
+            qos=1,
+        )
+
+    def notify_reason_ready(self, profile_id: str) -> None:
+        """reason 异步生成完 → 若该 profile 的设备已在线（ready 前就 join 了）→ 重推 island 带新 reason。
+
+        跑在 event-loop 线程（main.py reason worker via call_soon_threadsafe）。
+        list() 快照防与 paho 线程并发改 members（修 Codex P1）。
+        """
+        for m in list(self.room.members.values()):
+            if m.profile_id == profile_id and m.island >= 0:
+                self._push_island(m)
+
+    def _apply_profile(self, m, data: dict) -> bool:
+        """v3′：从 join payload 读 profile_id → 查 server profile 分岛 + reason。
+
+        返回是否本次**新分岛**（需 push island + emit island_assign + roster）。
+        - 无 profile_id 字段（真旧设备）→ False，走 legacy quiz/done。
+        - profile_id="" （v3' 设备但未经 skill 烧录 / 烧录异常）→ 用 uid 作确定性 fallback 身份
+          adopt，保证仍能分到岛（不在仪式核心静默失败；同 uid rejoin → 同岛）。
+        - 已分岛（Reset/rejoin 同 pid）→ False，幂等不重复（island 绑 profile_id，同岛）。
+        - 未知 pid → store.adopt 轮转一个新岛（兼容 orphan，rejoin 一致）。
+        """
+        pid = data.get("profile_id")
+        if pid is None:
+            return False  # 真旧设备：无 profile_id 字段 → legacy quiz/done
+        if not isinstance(pid, str):
+            return False
+        if m.island >= 0:
+            return False
+        from .profile_store import store
+        # 空 pid → 以 uid 派生确定性 fallback key（review Codex P1）。effective_pid 贯穿
+        # adopt + m.profile_id，使 _push_island 重取 reason / profile_request 重推 / notify_reason_ready
+        # 都能匹配上这个 fallback profile（review Codex P2：不能把空串写回 m.profile_id）。
+        effective_pid = pid or f"uid:{m.uid}"
+        if pid:
+            prof = store.get(pid) or store.adopt(pid)
+        else:
+            prof = store.adopt(effective_pid)
+        assigned = self.room.assign_island(m.uid, prof["island"])
+        if assigned is None or assigned.island < 0:
+            return False
+        m.profile_id = effective_pid
+        m.seed = self._sanitize_seed(prof.get("text", ""))
+        m.reason_en = prof.get("reason_en", "")
+        m.reason_cn = prof.get("reason_cn", "")
+        return True
+
     def _handle_join(self, data: dict) -> None:
         uid = data.get("uid")
         nick = self._sanitize_nick(data.get("nick", "anon"))
@@ -208,11 +297,18 @@ class MqttBridge:
         elif sig_particle >= 0 and sig_particle in m.sig_owned:
             m.sig_particle = sig_particle
         m.sig_action = sig_action
+        # v3′：join 携 baked profile_id → 查 server profile 分岛 + reason（代替旧 baked island/seed）。
+        freshly_assigned = self._apply_profile(m, data)
         if not was_new:
+            if freshly_assigned:
+                # 重连/服务端重启后首个 profile join 补分岛 → push + 登岛 + 名册
+                self._push_island(m)
+                self._emit_island_assign(m)
+                self.publish_roster()
             if (m.nick != old_nick or m.avatar != old_avatar or
                     m.sig_particle != old_sig_particle or m.sig_action != old_sig_action):
                 self._emit_profile_update(m)
-            if m.nick != old_nick and m.island >= 0:
+            if m.nick != old_nick and m.island >= 0 and not freshly_assigned:
                 self.publish_roster()   # 名册（含 nick）随改名刷新（review Codex P2）
             return
         log.info("JOIN %s (%s) count=%d island=%d", nick, uid, self.room.count, m.island)
@@ -225,6 +321,9 @@ class MqttBridge:
             "sig_action": m.sig_action,
             "count": self.room.count, "ts": now_ms(),
         })
+        if freshly_assigned:
+            self._push_island(m)          # S→C 揭晓 island+reason
+            self._emit_island_assign(m)   # 大屏登岛
         self.publish_roster()
 
     def _handle_profile(self, data: dict) -> None:
@@ -260,6 +359,17 @@ class MqttBridge:
             self._emit_profile_update(m)
         if nick_changed and m.island >= 0:
             self.publish_roster()   # 名册随改名刷新（review Codex P2）
+
+    def _handle_profile_request(self, data: dict) -> None:
+        """设备进揭晓屏时拉自己的 island + 文艺 reason（首次 + Reset 重进都走这）。
+
+        payload: {uid}。已分岛才回 island/<uid>；未分岛静默（device 自带 loading）。
+        """
+        uid = data.get("uid")
+        m = self.room.members.get(uid) if uid else None
+        if m is None or m.island < 0:
+            return
+        self._push_island(m)
 
     def _handle_leave(self, data: dict) -> None:
         uid = data.get("uid")
@@ -334,18 +444,8 @@ class MqttBridge:
             json.dumps({"island": m_island, "name": m_name, "color": m_color}),
             qos=1,
         )
-        # 大屏：小人登岛
-        self._emit({
-            "type": "island_assign",
-            "uid": uid, "nick": m.nick,
-            "island": m_island, "island_color": m_color,
-            "spectrum": m.spectrum.as_list() if m.spectrum else [],
-            "avatar": m.avatar,
-            "sig_particle": m.sig_particle,
-            "sig_action": m.sig_action,
-            "x": round(m.x, 1), "y": round(m.y, 1),
-            "ts": now_ms(),
-        })
+        # 大屏：小人登岛（复用 helper，与 v3 join 一致）
+        self._emit_island_assign(m)
         self.publish_roster()   # island 变了，名册带岛色重推
 
     def _handle_hi_request(self, data: dict) -> None:
@@ -632,15 +732,20 @@ class MqttBridge:
         nick, island = m.nick, m.island
         spectrum_colors = [c for c in m.spectrum.as_list() if c]
         hi_count = m.hi_count
-        quiz_answers = list(m.quiz_answers)
+        # v3：优先用 baked seed；legacy quiz 成员（无 seed）回落从 quiz 答案派生一句倾向。
+        seed = m.seed
+        if not seed and m.quiz_answers:
+            a0 = m.quiz_answers[0]
+            seed = ("leans toward people/home" if a0 == 0 else
+                    "leans toward new places" if a0 == 1 else "leans toward quiet/solo")
         log.info("READING gen %s (%s) island=%d hi=%d", nick, uid, island, hi_count)
         self._reading_pool.submit(
-            self._reading_worker, uid, gen, nick, island, spectrum_colors, hi_count, quiz_answers)
+            self._reading_worker, uid, gen, nick, island, spectrum_colors, hi_count, seed)
 
-    def _reading_worker(self, uid, gen, nick, island, spectrum_colors, hi_count, quiz_answers) -> None:
+    def _reading_worker(self, uid, gen, nick, island, spectrum_colors, hi_count, seed) -> None:
         """线程池里跑：调 CopilotX 生成 → 投递回主循环存缓存 + 发布。永不抛。"""
         try:
-            result = generate_reading(nick, island, spectrum_colors, hi_count, quiz_answers)
+            result = generate_reading(nick, island, spectrum_colors, hi_count, seed)
         except Exception:
             log.exception("reading worker crashed for %s", uid)
             result = None
@@ -732,14 +837,6 @@ class MqttBridge:
     def publish_notice(self, text: str, level: str = "info") -> None:
         self.client.publish(config.topic("sys", "notice"),
                             json.dumps({"text": text, "level": level}), qos=1)
-
-    def publish_ota(self, manifest: dict) -> None:
-        """OTA — 广播 `loiter/<room>/sys/ota`，retain=true 让晚到的设备也能拿到。"""
-        payload = json.dumps(manifest, ensure_ascii=False)
-        log.warning("OTA broadcast version=%s targets=%s url=%s",
-                    manifest.get("version"), manifest.get("targets", "all"),
-                    manifest.get("url"))
-        self.client.publish(config.topic("sys", "ota"), payload, qos=1, retain=True)
 
     def _emit(self, event: dict) -> None:
         """从网络线程把事件安全投递给主循环做 WS 广播。"""

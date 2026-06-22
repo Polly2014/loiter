@@ -51,7 +51,6 @@ loiter/<room>/<topic>[/<sub>]
 | `loiter/hall/leave` | C→S | 1 | `{uid, reason?}` | 主动下线 / LWT |
 | `loiter/hall/move` | C→S | 0 | `{uid, dx, dy}` | IMU 倾斜，dx/dy ∈ [-1,1]，服务端 250ms 限流 |
 | `loiter/hall/status` | S→all | 0 | `{count, ts}` | 在线人数心跳（5s） |
-| `loiter/hall/sys/ota` | S→all | 1+retain | `{version, url, sha256, size, targets, build_ts}` | OTA 推送 |
 | `loiter/hall/sys/notice` | S→all | 1 | `{text, level}` | 系统通告 |
 
 ### 玩法层（v2 新 · Islands of Color）

@@ -50,7 +50,11 @@ class Member:
     island: int = -1                       # 0-5（quiz 后分配）；-1 = 未分配
     spectrum: Spectrum | None = None       # 5 格色彩收集（登岛后初始化）
     hi_count: int = 0                      # 完成的 HI 握手数
-    quiz_answers: list[int] = field(default_factory=list)  # quiz 原始 3 选择（Phase 3 reading 用）
+    quiz_answers: list[int] = field(default_factory=list)  # （legacy）旧 quiz 3 选择；v3 已弃，留作过渡兼容
+    seed: str = ""                         # v3′ profile.text（喂 Phase 3 reading，替代 quiz_answers）
+    profile_id: str = ""                   # v3′ 烧录 profile id（设备 baked，join 携带）
+    reason_en: str = ""                    # v3′ Phase-1 文艺分岛 reason（server 预生成，push 给设备揭晓）
+    reason_cn: str = ""
     reading: dict | None = None            # 缓存的 AI reading（按需生成一次，防重复打 CopilotX）
     avatar: dict = field(default_factory=dict)  # dress-up 形象（shape/color）
     sig_particle: int = -1                  # 当前展示的粒子（S 屏在 owned 内切换；JOIN/HI/大屏都用它）

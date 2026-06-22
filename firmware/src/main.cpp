@@ -1,6 +1,6 @@
 #include <M5Cardputer.h>
 #include "sprites/sprites.h"
-#include "net.h"   // v2 联网层（WiFi+MQTT+UID+OTA）
+#include "net.h"   // v2 联网层（WiFi+MQTT+UID）
 
 // 音效 no-op wrapper：v1 踩坑——Cardputer-Adv 上 ES8311 Speaker 的 I2S task 与
 // PubSubClient 冲突致卡死/MQTT 掉线。M5Unified 的 tone() 会在 _play_raw()
@@ -100,9 +100,6 @@ enum Screen {
     P1_01_WELCOME,
     P1_02_USERNAME,
     P1_03_DRESSUP,
-    P1_04_QUIZ_Q1,
-    P1_05_QUIZ_Q2,
-    P1_06_QUIZ_Q3,
     P1_07_ISLAND_REVEAL,
     P1_08_ARRIVAL,
     P2_01_LIVE_MIRROR,
@@ -122,10 +119,16 @@ static Screen g_screen = P1_01_WELCOME;
 // Onboarding state
 static char    g_username[13] = "";
 static uint8_t g_username_len = 0;
-static int8_t  g_quiz_answers[3] = {-1, -1, -1};   // -1 = no answer yet
-static uint8_t g_quiz_cursor = 0;                   // 0/1/2 — current option in active quiz
-static int8_t  g_island = -1;                       // 0-5 after Q3; -1 before
+static int8_t  g_island = -1;                       // 0-5 服务端 push（island/<uid>）；-1 前
 static bool    g_joined = false;                    // true 后 = 已发 join，大屏有可视小人（含未分岛中心位）
+
+// Phase 1 揭晓屏：服务端据 baked profile_id push 的文艺双语 reason（island/<uid>，v3'）
+static char     g_island_reason_en[96] = "";        // EN 文艺解读
+static char     g_island_reason_cn[80] = "";        // CN 文艺解读
+static bool     g_island_ready        = false;      // reason 已就位（真到达或本地 fallback）
+static uint32_t g_island_req_ms       = 0;          // 进揭晓屏首发 profile/request 时刻（0=未发）
+static uint32_t g_island_last_req_ms  = 0;          // 上次重发 profile/request（重连/丢包兜底）
+static bool     g_island_warned       = false;      // 过久拿不到岛 → 揭晓屏显可见错误提示（非静默死状态）
 
 // Phase 2 / 3 state
 static int8_t  g_collection[5]   = {-1,-1,-1,-1,-1};  // slot[0] = home island after P1-08; rest from HI
@@ -217,49 +220,6 @@ static int8_t island_idx_from_hex(const char* hex) {
     return -1;  // 未知色（不应发生，服务端只发 6 岛色）
 }
 
-
-// Quiz content (English, per PRD) — single line each (≤40 chars to fit 240px @ Font0)
-static const char* QUIZ_Q[3] = {
-    "How do you spend a free weekend?",
-    "Beauty catches you off guard. You",
-    "In a deep conversation, you",
-};
-static const char* QUIZ_OPT[3][3] = {
-    { "with people who feel home",
-      "step into somewhere new",
-      "quiet hours that are mine" },
-    { "move toward it, want in",
-      "soften, let it land",
-      "wonder what makes it work" },
-    { "say the truest thing",
-      "listen long, hold space",
-      "riff on ideas, play" },
-};
-
-// Quiz scoring (each option → 2 islands: primary +2, secondary +1)
-// Maps directly from PRD §3.6 quiz mapping table.
-struct ScoreEntry { uint8_t isle; uint8_t pts; };
-static const ScoreEntry QUIZ_SCORE[3][3][2] = {
-    // Q1: A→Hearth/Ember  B→Spark/Mist  C→Grove/Tide
-    { {{1,2},{0,1}}, {{2,2},{5,1}}, {{3,2},{4,1}} },
-    // Q2: A→Ember/Spark   B→Hearth/Grove  C→Tide/Mist
-    { {{0,2},{2,1}}, {{1,2},{3,1}}, {{4,2},{5,1}} },
-    // Q3: A→Ember/Tide    B→Grove/Hearth  C→Mist/Spark
-    { {{0,2},{4,1}}, {{3,2},{1,1}}, {{5,2},{2,1}} },
-};
-
-static int compute_island_from_quiz() {
-    int s[6] = {0};
-    for (int q = 0; q < 3; ++q) {
-        if (g_quiz_answers[q] < 0) continue;
-        int a = g_quiz_answers[q];
-        s[QUIZ_SCORE[q][a][0].isle] += QUIZ_SCORE[q][a][0].pts;
-        s[QUIZ_SCORE[q][a][1].isle] += QUIZ_SCORE[q][a][1].pts;
-    }
-    int best = 0;
-    for (int i = 1; i < 6; ++i) if (s[i] > s[best]) best = i;
-    return best;
-}
 
 static void goto_screen(Screen s) {
     g_screen = s;
@@ -775,129 +735,162 @@ static void input_p1_02_username(const std::set<char>& new_keys, bool enter_pres
     }
 }
 
-// --- P1-04 / P1-05 / P1-06 Quiz (parameterized) ---
-static void draw_quiz(int q_idx) {
+// ── 揭晓屏文字换行助手（EN 贪心按词 / CN 按 UTF-8 码点）──
+static int draw_wrap_en(const char* s, int x, int y, int max_w, int line_h, int max_lines, uint16_t color) {
     auto& d = M5Cardputer.Display;
-    d.fillScreen(COL_FRAME_BG);
     d.setFont(&fonts::Font0);
     d.setTextSize(1);
     d.setTextDatum(top_left);
-
-    // Header
-    d.setTextColor(COL_LAVENDER_DK);
-    char head[16];
-    snprintf(head, sizeof(head), "QUESTION %d / 3", q_idx + 1);
-    d.drawString(head, 6, 5);
-
-    // Question — single line
-    d.setTextColor(COL_LAVENDER);
-    d.drawString(QUIZ_Q[q_idx], 6, 22);
-
-    // 3 options
-    int y0 = 50;
-    int line_h = 18;
-    for (int i = 0; i < 3; ++i) {
-        bool sel = (i == g_quiz_cursor);
-        int row_y = y0 + i * line_h;
-        if (sel) {
-            d.fillRect(4, row_y - 3, SCREEN_W - 8, line_h - 1, COL_LEFT_BG_B);
-        }
-        uint16_t fg = sel ? COL_GOLD : COL_LAVENDER;
-        d.setTextColor(fg);
-        char buf[64];
-        snprintf(buf, sizeof(buf), "%s %c . %s",
-                 sel ? ">" : " ", 'A' + i, QUIZ_OPT[q_idx][i]);
-        d.drawString(buf, 6, row_y);
-    }
-
-    // Hint
-    d.setTextColor(COL_LAVENDER_DK);
-    d.drawString("Up/Down select | ENTER ok | DEL back", 6, 122);
-}
-
-static void input_quiz(int q_idx, const std::set<char>& new_keys, bool enter_pressed, bool del_pressed) {
-    // M5 Cardputer arrow mapping: ';' = up, '.' = down
-    for (char c : new_keys) {
-        if (c == ';') {
-            if (g_quiz_cursor > 0) { g_quiz_cursor--; g_dirty = true; }
-        } else if (c == '.') {
-            if (g_quiz_cursor < 2) { g_quiz_cursor++; g_dirty = true; }
-        }
-    }
-    if (enter_pressed) {
-        g_quiz_answers[q_idx] = g_quiz_cursor;
-        g_quiz_cursor = 0;
-        if (q_idx == 0)      goto_screen(P1_05_QUIZ_Q2);
-        else if (q_idx == 1) goto_screen(P1_06_QUIZ_Q3);
-        else {
-            g_island = compute_island_from_quiz();   // 本地即时 fallback（不阻塞 UI）
-            // v2: 上报 quiz 答案 → 服务端权威分岛（island/<uid> 回调会覆写 g_island）
-            int ans[3] = { g_quiz_answers[0], g_quiz_answers[1], g_quiz_answers[2] };
-            net_publish_quiz_done(ans);
-            goto_screen(P1_07_ISLAND_REVEAL);
-        }
-    }
-    if (del_pressed) {
-        // Back to previous quiz / dress-up. Preserve prior answers.
-        // Restore cursor to whatever answer was already there (if any).
-        if (q_idx == 0)      { g_quiz_cursor = 0; goto_screen(P1_03_DRESSUP); }
-        else if (q_idx == 1) {
-            g_quiz_cursor = (g_quiz_answers[0] >= 0) ? g_quiz_answers[0] : 0;
-            goto_screen(P1_04_QUIZ_Q1);
+    d.setTextColor(color);
+    char line[80]; int ll = 0, lines = 0, si = 0;
+    while (s[si] && lines < max_lines) {
+        while (s[si] == ' ') si++;
+        char word[40]; int wl = 0;
+        while (s[si] && s[si] != ' ' && wl < (int)sizeof(word) - 1) word[wl++] = s[si++];
+        word[wl] = '\0';
+        if (wl == 0) break;
+        char trial[80];
+        if (ll == 0) snprintf(trial, sizeof(trial), "%s", word);
+        else         snprintf(trial, sizeof(trial), "%s %s", line, word);
+        if ((int)d.textWidth(trial) <= max_w) {
+            strncpy(line, trial, sizeof(line) - 1); line[sizeof(line) - 1] = '\0'; ll = strlen(line);
         } else {
-            g_quiz_cursor = (g_quiz_answers[1] >= 0) ? g_quiz_answers[1] : 0;
-            goto_screen(P1_05_QUIZ_Q2);
+            if (ll > 0) { d.drawString(line, x, y + lines * line_h); lines++; }
+            if (lines >= max_lines) break;
+            strncpy(line, word, sizeof(line) - 1); line[sizeof(line) - 1] = '\0'; ll = strlen(line);
         }
+    }
+    if (ll > 0 && lines < max_lines) { d.drawString(line, x, y + lines * line_h); lines++; }
+    return lines;
+}
+
+static void draw_wrap_cn(const char* s, int x, int y, int cps_per_line, int line_h, int max_lines, uint16_t color) {
+    auto& d = M5Cardputer.Display;
+    d.setFont(&fonts::efontCN_14);
+    d.setTextSize(1);
+    d.setTextDatum(top_left);
+    d.setTextColor(color);
+    char line[80]; int lb = 0, cps = 0, lines = 0, i = 0;
+    while (s[i] && lines < max_lines) {
+        unsigned char c = (unsigned char)s[i];
+        int clen = (c < 0x80) ? 1 : (c < 0xE0) ? 2 : (c < 0xF0) ? 3 : 4;
+        for (int k = 0; k < clen && s[i]; k++) { if (lb < (int)sizeof(line) - 1) line[lb++] = s[i]; i++; }
+        cps++;
+        if (cps >= cps_per_line) { line[lb] = '\0'; d.drawString(line, x, y + lines * line_h); lines++; lb = 0; cps = 0; }
+    }
+    if (lb > 0 && lines < max_lines) { line[lb] = '\0'; d.drawString(line, x, y + lines * line_h); }
+}
+
+// 本地岛屿 reason fallback（双语）—— server 15s 没回 reason 时兜底，调性不崩、不依赖网络
+struct IslandReasonFB { const char* en; const char* cn; };
+static const IslandReasonFB ISLAND_REASON_FB[6] = {
+    { "you burn bright and refuse to fade",      "你燃烧着，从不肯黯淡" },   // EMBER
+    { "you make every room feel like home",      "你让每个角落都像家" },     // HEARTH
+    { "your curiosity lights the long road",     "好奇心照亮你的长路" },     // SPARK
+    { "you grow quiet and deep, like old roots", "你像老树根，沉静而深" },   // GROVE
+    { "you hold steady when the tide runs high", "潮水再高，你也稳住" },     // TIDE
+    { "you dream in the fog and find the way",   "你在雾里做梦，也找到路" }, // MIST
+};
+
+static void fill_island_reason_fallback(int island_idx) {
+    const IslandReasonFB& f = ISLAND_REASON_FB[(island_idx >= 0 && island_idx < 6) ? island_idx : 2];
+    strncpy(g_island_reason_en, f.en, sizeof(g_island_reason_en) - 1);
+    g_island_reason_en[sizeof(g_island_reason_en) - 1] = '\0';
+    strncpy(g_island_reason_cn, f.cn, sizeof(g_island_reason_cn) - 1);
+    g_island_reason_cn[sizeof(g_island_reason_cn) - 1] = '\0';
+    g_island_ready = true;
+}
+
+// 揭晓屏在 loop 里的拉取/兜底（不在 draw 里每帧全屏重绘 → 防闪屏；reason 异步到达靠 on_island 置 g_dirty）：
+//   首发 profile/request → 未就位每 3s 重发（重连/丢包兜底）→ 15s 岛已知但 reason 没来 → 本地 fallback。
+//   12s 连岛都没来（server/网络挂）→ 置 warned 让揭晓屏显可见错误提示（review Codex P2：非静默死状态）。
+static void maybe_request_island() {
+    if (g_screen != P1_07_ISLAND_REVEAL || g_island_ready) return;
+    uint32_t now = millis();
+    if (g_island_req_ms == 0) {                       // 首次进屏：拉一次本机岛屿+reason
+        net_publish_profile_request();
+        g_island_req_ms = now;
+        g_island_last_req_ms = now;
+        return;
+    }
+    if (now - g_island_last_req_ms >= 3000) {          // 3s 重发（QoS0 丢包 / MQTT 重连窗口）
+        net_publish_profile_request();
+        g_island_last_req_ms = now;
+    }
+    if (g_island < 0) {
+        // 连岛都没来：12s 后点亮可见错误提示（仅一次置 dirty 驱动重绘，之后仍静默重试自愈）
+        if (!g_island_warned && now - g_island_req_ms >= 12000) {
+            g_island_warned = true;
+            g_dirty = true;
+        }
+        return;
+    }
+    if (now - g_island_req_ms >= 15000) {             // 15s 兜底：岛已知但 reason 始终没来
+        fill_island_reason_fallback(g_island);
+        g_dirty = true;
     }
 }
 
-// --- P1-07 Island Reveal ---
+// --- P1-07 Island Reveal（v3'：显服务端 push 的 island + 文艺双语 reason）---
 static void draw_p1_07_island_reveal() {
     auto& d = M5Cardputer.Display;
     d.fillScreen(COL_FRAME_BG);
     d.setFont(&fonts::Font0);
 
-    if (g_island < 0 || g_island >= 6) g_island = 0;
+    // island 还没 push 到 → finding 态（maybe_request_island 在 loop 里拉取）
+    if (g_island < 0 || g_island >= 6) {
+        d.setTextSize(1);
+        d.setTextDatum(middle_center);
+        d.setTextColor(COL_LAVENDER);
+        d.drawString("finding your island...", SCREEN_W/2, SCREEN_H/2 - 6);
+        if (g_island_warned) {  // 过久没来 → 可见错误提示（仍后台重试自愈）
+            d.setTextColor(COL_LAVENDER_DK);
+            d.drawString("check wifi - ask your host", SCREEN_W/2, SCREEN_H/2 + 12);
+        }
+        return;
+    }
     const IslandInfo& isle = ISLANDS[g_island];
 
     d.setTextSize(1);
     d.setTextDatum(middle_center);
     d.setTextColor(COL_LAVENDER_DK);
-    d.drawString("YOU BELONG ON", SCREEN_W/2, 18);
+    d.drawString("YOU BELONG ON", SCREEN_W/2, 12);
 
-    // Center: color swatch + island name (size 2 font)
+    // 岛名 size2 + 色块（island idx 服务端权威，色取 ISLANDS 表保持与状态栏一致）
     d.setTextSize(2);
     int name_w = (int)strlen(isle.name) * 12;
-    int block = 12;
-    int gap = 6;
+    int block = 12, gap = 6;
     int total_w = block + gap + name_w;
-    int gx = (SCREEN_W - total_w) / 2;
-    int gy = 38;
+    int gx = (SCREEN_W - total_w) / 2, gy = 24;
     d.fillRect(gx, gy, block, block, isle.color);
     d.drawRect(gx, gy, block, block, COL_BLACK);
     d.setTextColor(isle.color);
     d.setTextDatum(top_left);
     d.drawString(isle.name, gx + block + gap, gy - 1);
 
-    // Subtitle "ISLAND"
+    // reason 区：就位 → EN 贪心换行（≤3 行）+ CN efontCN（≤2 行）；未就位 → loading 态
+    if (g_island_ready && g_island_reason_en[0]) {
+        draw_wrap_en(g_island_reason_en, 10, 50, SCREEN_W - 20, 11, 3, COL_LAVENDER);
+        if (g_island_reason_cn[0])
+            draw_wrap_cn(g_island_reason_cn, 10, 88, 16, 18, 2, COL_GOLD);
+    } else {
+        d.setTextSize(1);
+        d.setTextDatum(middle_center);
+        d.setTextColor(COL_LAVENDER_DK);
+        d.drawString("reading the tides...", SCREEN_W/2, 72);
+    }
+
+    d.setFont(&fonts::Font0);
     d.setTextSize(1);
     d.setTextDatum(middle_center);
-    d.setTextColor(COL_LAVENDER_DK);
-    d.drawString("ISLAND", SCREEN_W/2, 62);
-
-    // Biome + traits
-    d.setTextColor(COL_LAVENDER);
-    d.drawString(isle.biome, SCREEN_W/2, 80);
-    d.setTextColor(COL_LAVENDER_DK);
-    d.drawString(isle.traits, SCREEN_W/2, 92);
-
     d.setTextColor(COL_GOLD);
-    d.drawString("[ ENTER TO CONTINUE ]", SCREEN_W/2, 118);
+    d.drawString("[ ENTER TO CONTINUE ]", SCREEN_W/2, 128);
 }
 
 static void input_p1_07_island_reveal(bool enter_pressed, bool del_pressed) {
-    if (enter_pressed) {
-        // Initialize collection with home island as slot 0
+    if (enter_pressed && g_island >= 0 && g_island < 6) {
+        // 闸门：岛未到不让继续（review Codex P1：防空 profile / server miss 时隐式默认 island 0）。
+        // reason 未到仍可继续（只是调性，不困住用户）。
         g_collection[0] = g_island;
         for (int i = 1; i < 5; ++i) g_collection[i] = -1;
         // Randomly assign signature particle (0-3: SPARKLE/HEART/LEAF/BUTTERFLY)
@@ -910,8 +903,7 @@ static void input_p1_07_island_reveal(bool enter_pressed, bool del_pressed) {
         goto_screen(P1_08_ARRIVAL);
     }
     if (del_pressed) {
-        g_quiz_cursor = (g_quiz_answers[2] >= 0) ? g_quiz_answers[2] : 0;
-        goto_screen(P1_06_QUIZ_Q3);
+        goto_screen(P1_03_DRESSUP);   // v3'：quiz 已删，回换装屏
     }
 }
 
@@ -921,7 +913,12 @@ static void dressup_handle_input(const std::set<char>& new_keys, bool enter_pres
     if (enter_pressed) {
         emit_selection();  // Serial debug
         publish_profile_state();  // 把换装结果实时同步到大屏
-        goto_screen(P1_04_QUIZ_Q1);
+        // v3'：分岛由 server 据 baked profile_id 决定（join 时已 push island/<uid>）。
+        // 进揭晓屏前重置拉取计时 → 未就位则 maybe_request_island 发 profile/request。
+        g_island_req_ms = 0;
+        g_island_last_req_ms = 0;
+        g_island_warned = false;
+        goto_screen(P1_07_ISLAND_REVEAL);
     }
     if (del_pressed) {
         goto_screen(P1_02_USERNAME);  // back to username (preserved)
@@ -3160,9 +3157,6 @@ static void dispatch_redraw() {
         case P1_01_WELCOME:        draw_p1_01_welcome(); break;
         case P1_02_USERNAME:       draw_p1_02_username(); break;
         case P1_03_DRESSUP:        redraw_all(); break;
-        case P1_04_QUIZ_Q1:        draw_quiz(0); break;
-        case P1_05_QUIZ_Q2:        draw_quiz(1); break;
-        case P1_06_QUIZ_Q3:        draw_quiz(2); break;
         case P1_07_ISLAND_REVEAL:  draw_p1_07_island_reveal(); break;
         case P1_08_ARRIVAL:        draw_p1_08_arrival(); break;
         case P2_01_LIVE_MIRROR:    draw_p2_01_live_mirror(); break;
@@ -3184,9 +3178,6 @@ static void dispatch_input(const std::set<char>& new_keys, bool enter_pressed, b
         case P1_01_WELCOME:        input_p1_01_welcome(enter_pressed); break;
         case P1_02_USERNAME:       input_p1_02_username(new_keys, enter_pressed, del_pressed); break;
         case P1_03_DRESSUP:        dressup_handle_input(new_keys, enter_pressed, del_pressed); break;
-        case P1_04_QUIZ_Q1:        input_quiz(0, new_keys, enter_pressed, del_pressed); break;
-        case P1_05_QUIZ_Q2:        input_quiz(1, new_keys, enter_pressed, del_pressed); break;
-        case P1_06_QUIZ_Q3:        input_quiz(2, new_keys, enter_pressed, del_pressed); break;
         case P1_07_ISLAND_REVEAL:  input_p1_07_island_reveal(enter_pressed, del_pressed); break;
         case P1_08_ARRIVAL:        input_p1_08_arrival(enter_pressed, del_pressed); break;
         case P2_01_LIVE_MIRROR:    input_p2_01_live_mirror(new_keys, enter_pressed, del_pressed); break;
@@ -3224,14 +3215,21 @@ static bool needs_animation_redraw() {
 // ──────────────────────────────────────────────────────────────────────────────
 // v2 网络回调 —— 服务端入站事件驱动 UI 状态机
 // ──────────────────────────────────────────────────────────────────────────────
-static void net_on_island(int island, const char* name, const char* color) {
-    // 服务端权威分岛 → 覆写本地 fallback
+static void net_on_island(int island, const char* name, const char* color,
+                          const char* reason_en, const char* reason_cn) {
+    // v3'：服务端据 baked profile_id 权威分岛 + 文艺双语 reason（先空后到 → 二次 push 补 reason）
     if (island >= 0 && island < 6) {
         g_island = island;
-        // 若已进入 reveal 固化了本地岛，同步修正收集格首格为本色（review Codex #2）
-        if (g_collection[0] >= 0) g_collection[0] = island;
-        g_dirty = true;
+        if (g_collection[0] >= 0) g_collection[0] = island;  // 收集格首格本色（review Codex #2）
     }
+    if (reason_en && reason_en[0]) {  // reason 真到达（首推可能空，notify_reason_ready 二次推填）
+        strncpy(g_island_reason_en, reason_en, sizeof(g_island_reason_en) - 1);
+        g_island_reason_en[sizeof(g_island_reason_en) - 1] = '\0';
+        strncpy(g_island_reason_cn, reason_cn ? reason_cn : "", sizeof(g_island_reason_cn) - 1);
+        g_island_reason_cn[sizeof(g_island_reason_cn) - 1] = '\0';
+        g_island_ready = true;
+    }
+    g_dirty = true;
     (void)name; (void)color;
 }
 static void net_on_hi_incoming(const char* requester, const char* nick, const char* color, const char* msg) {
@@ -3345,7 +3343,7 @@ void setup() {
     randomSeed(esp_random());
     Serial.println("[boot] Pride workshop firmware — state machine ready");
 
-    // v2 联网层：WiFi（splash+配网门户）+ MQTT + UID + OTA
+    // v2 联网层：WiFi（splash+配网门户）+ MQTT + UID
     NetCallbacks cb = {};
     cb.on_island      = net_on_island;
     cb.on_hi_incoming = net_on_hi_incoming;
@@ -3369,9 +3367,13 @@ static void restart_all() {
     net_publish_leave();   // 通知服务端清除旧旅程（island/spectrum），重新输名 = 全新 member（review Codex P1/P2）
     g_username[0] = '\0';
     g_username_len = 0;
-    for (int i = 0; i < 3; ++i) g_quiz_answers[i] = -1;
-    g_quiz_cursor = 0;
     g_island = -1;
+    g_island_ready = false;
+    g_island_reason_en[0] = '\0';
+    g_island_reason_cn[0] = '\0';
+    g_island_req_ms = 0;
+    g_island_last_req_ms = 0;
+    g_island_warned = false;
     g_joined = false;   // dev reset 回大厅：停心跳，重新输名后再起
     g_shape[0] = 0; g_shape[1] = 0; g_shape[2] = 0; g_shape[3] = 1; g_shape[4] = 0;
     g_color[0] = 0; g_color[1] = 0; g_color[2] = 0; g_color[3] = 0; g_color[4] = 0;
@@ -3405,13 +3407,13 @@ static void fill_dev_state() {
 
 // ── 心跳自愈 ──────────────────────────────────────────────────────────
 // 服务端是纯内存态：意外重启会清空 room → 设备的 MQTT 连接还活着（不触发重连 →
-// 不重发 join）→ 小人从大屏消失且不会自动回来。心跳定期重发 join（+ 已分岛者 quiz/done），
-// 让服务端确定性地重建该成员（同 quiz → 同岛 + 本色）。门控 = g_joined（只要已上报 join、
-// 大屏有可视小人就维持，含"已输名但未走完 quiz"的中心位小人 — review Codex P1：未分岛
-// join 在大屏会 spawn 到地图中心，也需要恢复）。对存活服务端幂等：join 重发仅刷 last_seen
-// （服务端 _handle_join 对重复 join 不再 emit，防大屏每 25s 假 arrival）；quiz/done 命中
-// assign_island 的 m.island>=0 短路，不重置 spectrum。
-// 代价：服务端崩溃恢复后，HI 收集的非本色格会丢（重 quiz 只还原本色）—— 罕见崩溃可接受。
+// 不重发 join）→ 小人从大屏消失且不会自动回来。心跳定期重发 join，让服务端据 baked
+// profile_id 确定性地重建该成员（同 profile_id → 同岛 + 重推 island/<uid> 带 reason）。
+// 门控 = g_joined（只要已上报 join、大屏有可视小人就维持，含"已输名但未到揭晓"的中心位
+// 小人 — review Codex P1：未分岛 join 在大屏会 spawn 到地图中心，也需恢复）。对存活服务端
+// 幂等：join 重发仅刷 last_seen（服务端 _handle_join 对重复 join 不再 emit，防大屏每 25s
+// 假 arrival）；island/<uid> 重推由 server _apply_profile 幂等保证（已分岛只刷不重置）。
+// v3' 不再发 quiz/done —— 分岛权威搬到 profile_id，设备不带分岛逻辑。
 static const uint32_t HEARTBEAT_MS = 25000;
 static uint32_t g_last_heartbeat = 0;
 static void maybe_publish_heartbeat() {
@@ -3420,17 +3422,14 @@ static void maybe_publish_heartbeat() {
     if (now - g_last_heartbeat < HEARTBEAT_MS) return;
     g_last_heartbeat = now;
     net_set_profile(g_shape, g_color, g_sig_particle, g_sig_action);
-    net_publish_join();   // 维持小人（包括未分岛的中心位）
-    if (g_island >= 0) {  // 已分岛 → 额外重发 quiz/done 还原岛屏 + 本色格
-        int ans[3] = { g_quiz_answers[0], g_quiz_answers[1], g_quiz_answers[2] };
-        net_publish_quiz_done(ans);
-    }
+    net_publish_join();   // 维持小人；server 据 baked profile_id 重建同一岛 + 重推 island/<uid>
 }
 
 void loop() {
     M5Cardputer.update();
-    net_loop();   // v2: wifiEnsure + mqttEnsure + mqtt.loop + OTA pending
+    net_loop();   // v2: wifiEnsure + mqttEnsure + mqtt.loop
     maybe_publish_heartbeat();   // 心跳自愈：服务端重启后小人自动回归（详见函数注释）
+    maybe_request_island();      // 揭晓屏未就位时拉取 island/<uid>（首发+3s重发+15s fallback）
     auto status = M5Cardputer.Keyboard.keysState();
 
     // Build sets of keys this frame

@@ -2,19 +2,27 @@
 #include "net.h"
 #include <M5Cardputer.h>
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
-#include <HTTPClient.h>
-#include <Update.h>
 #include <Preferences.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include "mbedtls/sha256.h"
 #include "config.h"
 
 #ifndef LOITER_FW_VERSION
 #define LOITER_FW_VERSION "0.0.0-dev"
 #endif
 static const char* FW_VERSION = LOITER_FW_VERSION;
+
+// user_profile.h 由 loiter-flash skill 每人生成（gitignored），只定义 LOITER_PROFILE_ID
+// （一次性烧录身份）。缺失时 fallback 空串，编译不炸（review Codex #1）——
+// 空 profile_id 时 server 会走 adopt 兜底（轮转一个新岛）。
+#if defined(__has_include)
+#  if __has_include("user_profile.h")
+#    include "user_profile.h"
+#  endif
+#endif
+#ifndef LOITER_PROFILE_ID
+#define LOITER_PROFILE_ID ""
+#endif
 
 // ── 全局状态 ──────────────────────────────────────────────
 static Preferences  prefs;
@@ -56,8 +64,6 @@ static void fillProfile(JsonDocument& doc) {
 }
 
 // ── 前向声明 ──
-static void handleOtaMessage(JsonDocument& doc);
-static void performOTA();
 static bool runWifiSetup();
 
 // ── 发布 ──────────────────────────────────────────────────
@@ -77,7 +83,8 @@ void net_publish_join() {
     JsonDocument doc;
     fillProfile(doc);
     doc["fw_ver"] = FW_VERSION;
-    char buf[320];
+    doc["profile_id"] = LOITER_PROFILE_ID;  // v3'：baked 一次性身份，server 据此分岛
+    char buf[360];
     size_t n = serializeJson(doc, buf, sizeof(buf));
     mqtt.publish(tp("join").c_str(), (const uint8_t*)buf, n, false);
 }
@@ -101,18 +108,14 @@ void net_publish_leave() {
     mqtt.publish(tp("leave").c_str(), (const uint8_t*)buf, n, false);
 }
 
-void net_publish_quiz_done(const int answers[3]) {
+void net_publish_profile_request() {
     if (!gMqttUp) return;
     JsonDocument doc;
     doc["uid"] = gUid;
-    JsonArray a = doc["answers"].to<JsonArray>();
-    for (int i = 0; i < 3; i++) a.add(answers[i]);
-    char buf[128];
+    char buf[96];
     size_t n = serializeJson(doc, buf, sizeof(buf));
-    // retain=false：quiz/done 是共享 topic，retain 只会留最后一人的答案，且服务端重连时
-    // room 通常还没该 uid 会被忽略；陈旧 retain 反而会二次触发 assign_island 重置 spectrum。
-    // 服务端补分岛由设备重新 join+quiz 驱动（review Codex #1 / 小龙虾 #1）。
-    mqtt.publish(tp("quiz/done").c_str(), (const uint8_t*)buf, n, false);
+    // C→S：请 server 重推本机 island/<uid>（揭晓屏首发 + 重连兜底 + Reset 重取）。
+    mqtt.publish(tp("profile/request").c_str(), (const uint8_t*)buf, n, false);
 }
 
 void net_publish_hi_request(const char* responder_uid, const char* msg) {
@@ -236,14 +239,13 @@ static void onMqttMessage(char* topicC, byte* payload, unsigned int len) {
         return;
     }
 
-    // OTA 必须先判（避免被 sys/ 通配吃掉）
-    if (t == "loiter/hall/sys/ota") { handleOtaMessage(doc); return; }
-
     if (t == "loiter/hall/island/" + gUid) {
         if (gCb.on_island) {
             gCb.on_island(doc["island"] | -1,
                           doc["name"] | "",
-                          doc["color"] | "#888888");
+                          doc["color"] | "#888888",
+                          doc["reason_en"] | "",
+                          doc["reason_cn"] | "");
         }
         return;
     }
@@ -324,7 +326,6 @@ static void mqttEnsure() {
         mqtt.subscribe(("loiter/hall/sig/" + gUid).c_str(), 1);
         mqtt.subscribe("loiter/hall/roster", 1);
         mqtt.subscribe("loiter/hall/phase", 1);
-        mqtt.subscribe("loiter/hall/sys/ota", 1);
         // 仅已输名（g_joined）后才发 auto-join；未输名时 gNick=="anon"，不发（防大屏出现幽灵 anon 小人）
         if (gNick != "anon") {
             net_publish_join();
@@ -340,139 +341,6 @@ static void wifiEnsure() {
     gLastWifiTry = millis();
     if (gSavedSSID.length()) WiFi.begin(gSavedSSID.c_str(), gSavedPass.c_str());
     else                     WiFi.begin(WIFI_SSID, WIFI_PASS);
-}
-
-// ── OTA（移植 v1，失败回调 redraw 而非 v1 redrawAll）────────
-struct OtaPending {
-    bool active = false;
-    String url, sha256, version;
-    uint32_t size = 0;
-};
-static OtaPending gOta;
-static bool gOtaInProgress = false;
-
-static void parseSemver(const String& s, int out[3]) {
-    out[0] = out[1] = out[2] = 0;
-    int idx = 0, start = 0;
-    for (int i = 0; i <= (int)s.length() && idx < 3; i++) {
-        if (i == (int)s.length() || s[i] == '.') {
-            out[idx++] = s.substring(start, i).toInt();
-            start = i + 1;
-        }
-    }
-}
-static bool versionNewer(const String& r, const String& c) {
-    int rr[3], cc[3];
-    parseSemver(r, rr); parseSemver(c, cc);
-    for (int i = 0; i < 3; i++) if (rr[i] != cc[i]) return rr[i] > cc[i];
-    return false;
-}
-static bool targetsMe(const String& targets) {
-    String t = targets; t.trim();
-    if (!t.length() || t == "all" || t == "*") return true;
-    String hay = "," + t + ","; hay.replace(" ", "");
-    return hay.indexOf("," + gUid + ",") >= 0;
-}
-static String hashToHex(const uint8_t h[32]) {
-    String out; out.reserve(64); char b[3];
-    for (int i = 0; i < 32; i++) { snprintf(b, sizeof(b), "%02x", h[i]); out += b; }
-    return out;
-}
-static void handleOtaMessage(JsonDocument& doc) {
-    String version = doc["version"] | "";
-    String url     = doc["url"]     | "";
-    String sha     = doc["sha256"]  | "";
-    String targets = doc["targets"] | "all";
-    uint32_t size  = doc["size"]    | 0;
-    if (!version.length() || !url.length()) return;
-    // 强制 sha256：缺失或非 64 位 hex 直接拒绝 OTA（安全口径 = sha256 强校验，review Codex #6）
-    sha.toLowerCase();
-    if (sha.length() != 64) return;
-    for (int i = 0; i < 64; i++) {
-        char c = sha[i];
-        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return;
-    }
-    if (!targetsMe(targets)) return;
-    if (!versionNewer(version, String(FW_VERSION))) return;
-    gOta.version = version; gOta.url = url; gOta.sha256 = sha;
-    gOta.size = size; gOta.active = true;
-}
-static void drawOtaUi(const String& title, const String& detail, int pct, uint16_t color) {
-    auto& d = M5Cardputer.Display;
-    d.fillScreen(TFT_BLACK);
-    d.setTextSize(2); d.setTextColor(0xC560, TFT_BLACK); d.setCursor(8, 8); d.print("OTA");
-    d.setTextSize(1); d.setTextColor(color, TFT_BLACK); d.setCursor(48, 14); d.print(title);
-    d.drawFastHLine(0, 30, 240, 0x4208);
-    d.setTextColor(TFT_LIGHTGREY, TFT_BLACK); d.setCursor(8, 40); d.print(detail);
-    if (pct >= 0) {
-        int bx = 8, by = 70, bw = 224, bh = 18;
-        d.drawRect(bx, by, bw, bh, 0x7BEF);
-        d.fillRect(bx + 1, by + 1, (bw - 2) * pct / 100, bh - 2, color);
-        char b[16]; snprintf(b, sizeof(b), "%3d%%", pct);
-        d.setTextColor(TFT_WHITE, TFT_BLACK); d.setCursor(105, by + bh + 8); d.print(b);
-    }
-    d.setTextColor(0x4208, TFT_BLACK); d.setCursor(8, 120); d.print("do not unplug");
-}
-static void otaFail(const String& title, const String& detail) {
-    drawOtaUi(title, detail, -1, TFT_RED);
-    delay(2500);
-    gOtaInProgress = false;
-    if (gCb.redraw) gCb.redraw();
-}
-static void performOTA() {
-    gOtaInProgress = true;
-    drawOtaUi("starting", "v" + gOta.version, 0, TFT_CYAN);
-    if (WiFi.status() != WL_CONNECTED) { otaFail("no wifi", "abort"); return; }
-
-    WiFiClientSecure secure; WiFiClient plain; WiFiClient* client = nullptr;
-    if (gOta.url.startsWith("https://")) { secure.setInsecure(); client = &secure; }
-    else if (gOta.url.startsWith("http://")) { client = &plain; }
-    else { otaFail("bad url", gOta.url.substring(0, 32)); return; }
-
-    HTTPClient http; http.setTimeout(15000);
-    if (!http.begin(*client, gOta.url)) { otaFail("begin failed", "url err"); return; }
-    int code = http.GET();
-    if (code != HTTP_CODE_OK) { http.end(); otaFail("http " + String(code), "abort"); return; }
-    int contentLen = http.getSize();
-    uint32_t expect = (contentLen > 0) ? (uint32_t)contentLen : gOta.size;
-    if (expect == 0) { http.end(); otaFail("no size", "abort"); return; }
-    if (!Update.begin(expect, U_FLASH)) { http.end(); otaFail("flash full?", Update.errorString()); return; }
-
-    drawOtaUi("downloading", String(expect / 1024) + " KB", 0, TFT_CYAN);
-    mbedtls_sha256_context sha; mbedtls_sha256_init(&sha); mbedtls_sha256_starts(&sha, 0);
-    WiFiClient* stream = http.getStreamPtr();
-    uint8_t buf[1024];
-    uint32_t written = 0; int lastPct = -1; uint32_t lastDataMs = millis();
-    while (http.connected() && written < expect) {
-        size_t avail = stream->available();
-        if (avail == 0) {
-            if (millis() - lastDataMs > 10000) { Update.abort(); http.end(); otaFail("stalled", "timeout"); return; }
-            delay(1); continue;
-        }
-        lastDataMs = millis();
-        int got = stream->readBytes(buf, min(avail, sizeof(buf)));
-        if (got <= 0) continue;
-        if (Update.write(buf, got) != (size_t)got) { Update.abort(); http.end(); otaFail("write err", Update.errorString()); return; }
-        mbedtls_sha256_update(&sha, buf, got);
-        written += got;
-        int pct = (int)(written * 100 / expect);
-        if (pct != lastPct) {
-            lastPct = pct;
-            drawOtaUi("downloading", String(written / 1024) + "/" + String(expect / 1024) + " KB", pct, TFT_CYAN);
-        }
-    }
-    http.end();
-
-    uint8_t hash[32]; mbedtls_sha256_finish(&sha, hash); mbedtls_sha256_free(&sha);
-    if (written != expect) { Update.abort(); otaFail("short read", String(written) + "/" + String(expect)); return; }
-    // sha256 强校验：handleOtaMessage 已保证 gOta.sha256 是 64 位 hex（review Codex #6）
-    if (hashToHex(hash) != gOta.sha256) {
-        Update.abort(); otaFail("sha mismatch", "rejected"); return;
-    }
-    if (!Update.end(true)) { otaFail("commit failed", Update.errorString()); return; }
-    drawOtaUi("restarting", "v" + gOta.version + " ok", 100, TFT_GREEN);
-    delay(1200);
-    ESP.restart();
 }
 
 // ── WiFi 配网门户（移植 v1 runWifiSetup，v2 视觉对齐 Designer Pride 风格）──
@@ -698,10 +566,6 @@ void net_loop() {
     wifiEnsure();
     if (gWifiUp) mqttEnsure();
     mqtt.loop();
-    if (gOta.active && !gOtaInProgress) {
-        gOta.active = false;
-        performOTA();
-    }
 }
 
 bool net_online() { return gWifiUp && gMqttUp; }

@@ -11,7 +11,7 @@ from loiter.islands import reading
 def test_fallback_shape():
     # ENABLED=false → 每岛返回结构正确的双语 fallback
     for idx in range(6):
-        r = reading.generate_reading("ALICE", idx, ["#e84d3c"], 3, [0, 1, 2])
+        r = reading.generate_reading("ALICE", idx, ["#e84d3c"], 3, "warm, curious, loves the sea")
         assert "title" in r and "lines" in r
         assert isinstance(r["lines"], list) and len(r["lines"]) == 9
         assert r["title"], "title 非空"

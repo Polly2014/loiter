@@ -91,47 +91,6 @@ async def avatar_png(uid: str):
                     headers={"ETag": etag, "Cache-Control": "public, max-age=300"})
 
 
-@app.get("/firmware/manifest.json")
-async def firmware_manifest():
-    """Phase 7.6 OTA — 公开的固件清单。
-
-    返回:
-      { "version": "0.2.0", "url": "https://loiter.polly.wang/firmware/loiter.bin",
-        "sha256": "...", "size": 1234567, "build_ts": 1748... }
-    没发布过固件 → 404。
-    """
-    mf = config.FIRMWARE_DIR / "manifest.json"
-    if not mf.is_file():
-        raise HTTPException(status_code=404, detail="no firmware published")
-    try:
-        return JSONResponse(json.loads(mf.read_text()))
-    except (OSError, ValueError) as exc:
-        log.error("bad firmware manifest: %s", exc)
-        raise HTTPException(status_code=500, detail="manifest unreadable")
-
-
-@app.post("/firmware/broadcast")
-async def firmware_broadcast(request: dict | None = None):
-    """Admin: 把当前 manifest 通过 MQTT `loiter/hall/sys/ota` 广播出去 → 在线设备立即升级。
-
-    body 可选 `{"targets": "all" | "card-abc,card-def"}`，默认 "all"。
-    无鉴权——内部工具，靠 NSG / cloudflare access 兜底。
-    """
-    mf = config.FIRMWARE_DIR / "manifest.json"
-    if not mf.is_file():
-        raise HTTPException(status_code=404, detail="no firmware published")
-    if bridge is None:
-        raise HTTPException(status_code=503, detail="bridge not ready")
-    try:
-        manifest = json.loads(mf.read_text())
-    except (OSError, ValueError) as exc:
-        raise HTTPException(status_code=500, detail=f"manifest unreadable: {exc}")
-    targets = (request or {}).get("targets", "all")
-    payload = {**manifest, "targets": targets, "ts": int(time.time() * 1000)}
-    bridge.publish_ota(payload)
-    return {"ok": True, "broadcast": payload}
-
-
 # ── Admin 控场（host 导播台）──────────────────────────────
 _STAGE_ACTIONS = {"dim", "undim", "reveal", "unreveal", "jump", "photo", "unphoto"}
 
@@ -170,6 +129,73 @@ async def admin_stage(
         raise HTTPException(status_code=503, detail="bridge not ready")
     bridge.emit_stage(action)
     return {"ok": True, "action": action}
+
+
+# ── 烧录 profile（v3′ 中心化分岛 + 文艺 reason）────────────────
+from .profile_store import N_ISLANDS as _FLASH_N, store as _profile_store
+
+
+def _tally_payload() -> dict:
+    from .islands.assignment import ISLANDS
+    counts = _profile_store.tally()
+    return {
+        "tally": {str(i): counts.get(i, 0) for i in range(_FLASH_N)},
+        "names": {str(isle.idx): isle.name for isle in ISLANDS},
+    }
+
+
+def _check_flash(token: str | None) -> None:
+    """烧录写鉴权 — fail-closed：未配 FLASH_TOKEN 拒绝所有写；配了则常量时间比对。"""
+    import secrets
+    expected = config.FLASH_TOKEN
+    if not expected:
+        raise HTTPException(status_code=403, detail="flash disabled (no token configured)")
+    if not token or not secrets.compare_digest(token, expected):
+        raise HTTPException(status_code=401, detail="bad flash token")
+
+
+def _gen_reason_blocking(pid: str, text: str, island: int) -> None:
+    """线程池里跑：生成文艺双语 reason → 回填 profile → 通知 bridge 重推在线设备。永不抛。"""
+    try:
+        from .islands.reading import generate_island_reason
+        en, cn = generate_island_reason(text, island)
+        _profile_store.set_reason(pid, en, cn)
+        log.info("REASON ready pid=%s island=%d", pid[:8], island)
+        # 若设备在 reason ready 前已 join（拿到空 reason）→ 重推 island 带新 reason（修 Codex P1）
+        if bridge is not None:
+            bridge.loop.call_soon_threadsafe(bridge.notify_reason_ready, pid)
+    except Exception:
+        log.exception("island reason gen failed pid=%s", pid[:8])
+
+
+@app.post("/flash/profile")
+async def flash_profile(body: dict | None = None, x_flash_token: str | None = Header(default=None)):
+    """烧录时建 profile：原子顺序轮转分岛 + 异步预生成文艺 reason。
+
+    body `{"text": "..."}`。返回 `{ok, profile_id}` —— **不返回 island/reason（不剧透）**。
+    """
+    _check_flash(x_flash_token)
+    text = (body or {}).get("text", "")
+    if not isinstance(text, str):
+        raise HTTPException(status_code=400, detail="text (str) required")
+    p = _profile_store.create(text)
+    # 编译/烧录窗口内异步生成 reason（join 时已就绪 → 揭晓零延迟）
+    asyncio.get_running_loop().run_in_executor(None, _gen_reason_blocking, p["profile_id"], text, p["island"])
+    return {"ok": True, "profile_id": p["profile_id"]}
+
+
+@app.get("/flash/tally")
+async def flash_tally_get():
+    """各岛已创建 profile 数（监控用）。只读公开。"""
+    return _tally_payload()
+
+
+@app.post("/flash/reset")
+async def flash_reset(x_admin_token: str | None = Header(default=None)):
+    """赛前清零（清 profiles + 轮转计数器）。走 admin token（fail-closed）。"""
+    _check_admin(x_admin_token)
+    _profile_store.reset()
+    return {"ok": True, **_tally_payload()}
 
 
 @app.websocket("/ws")

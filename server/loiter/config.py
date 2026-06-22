@@ -22,6 +22,11 @@ INSTANCE_NAME = os.getenv("LOITER_INSTANCE", "GLEAM Hall")
 # VM 侧在 /etc/loiter/loiter.env 配 LOITER_ADMIN_TOKEN=...，本地测试 export 一下。
 ADMIN_TOKEN = os.getenv("LOITER_ADMIN_TOKEN", "").strip()
 
+# --- 烧录占坑写鉴权（v3 loiter-flash skill 的 reserve/commit/release）---
+# 空 = fail-closed：未配则拒绝所有占坑写（GET /flash/tally 只读保持公开）。
+# 工作坊密钥，发给参与者（与 admin token 分开）。VM 侧走 /etc/loiter/loiter.env。
+FLASH_TOKEN = os.getenv("LOITER_FLASH_TOKEN", "").strip()
+
 # --- HTTP / WebSocket ---
 HTTP_HOST = os.getenv("LOITER_HTTP_HOST", "0.0.0.0")
 HTTP_PORT = int(os.getenv("LOITER_HTTP_PORT", "8080"))
@@ -41,9 +46,9 @@ import pathlib
 
 _SERVER_DIR = pathlib.Path(__file__).resolve().parent.parent
 WEB_DIR = pathlib.Path(os.getenv("LOITER_WEB_DIR", _SERVER_DIR.parent / "web"))
-# Phase 7.6 OTA: firmware 目录（loiter.bin + manifest.json）默认放在 web/firmware/
-# Web 静态 mount 会顺带把 /firmware/loiter.bin 暴露出去
-FIRMWARE_DIR = pathlib.Path(os.getenv("LOITER_FIRMWARE_DIR", WEB_DIR / "firmware"))
+
+# v3′ 烧录 profile 持久化（SQLite）：分岛/文艺 reason 绑 profile_id，跨重启不丢
+PROFILE_DB = pathlib.Path(os.getenv("LOITER_PROFILE_DB", _SERVER_DIR / "data" / "profiles.db"))
 
 
 def topic(*parts: str) -> str:

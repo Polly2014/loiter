@@ -39,7 +39,7 @@
 
 - [ ] Phase transitions: admin `B` key (firmware) or dev panel buttons (big screen)
 - [ ] Before Phase 3: confirm CopilotX alive (reading depends on it; fallback exists but AI reading is better)
-- [ ] Emergency bug fix → only modify server/web + rsync (no restart), or push OTA firmware
+- [ ] Emergency bug fix → only modify server/web + rsync (no restart); firmware fix needs USB re-flash (OTA removed in Phase D)
 - [ ] If someone's device disconnects: it will self-heal within 25s (heartbeat)
 
 ### After Event
