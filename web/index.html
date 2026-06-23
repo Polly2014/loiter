@@ -2147,6 +2147,9 @@ function wsRenderSpectrum(rec, spectrum) {
 }
 
 // ── WS 事件分发 ──
+// 权威英文岛名（对齐 server islands/assignment.py ISLANDS 索引）
+const ISLAND_NAMES = ['EMBER', 'HEARTH', 'SPARK', 'GROVE', 'TIDE', 'MIST'];
+
 function handleWsEvent(ev) {
   switch (ev.type) {
     case 'snapshot':
@@ -2173,7 +2176,8 @@ function handleWsEvent(ev) {
     case 'island_assign': {
       const rec = wsSpawn(ev.uid, ev.nick, ev.island, ev.x, ev.y, ev.avatar || null);
       if (ev.spectrum) wsRenderSpectrum(rec, ev.spectrum);
-      log(`🏝 ${ev.nick} → island ${ev.island}`, 'log-event');
+      const isleName = ISLAND_NAMES[ev.island] || `island ${ev.island}`;
+      log(`🏝 ${ev.nick} joined ${isleName}`, 'log-event');
       break;
     }
     case 'hi_arc': {
