@@ -1117,6 +1117,14 @@ html, body {
 
     <div class="dev-divider"></div>
 
+    <!-- Row: Flash window (烧录窗口开关，host 控) -->
+    <div class="dev-row">
+      <span class="dev-row-label">FLASH</span>
+      <button class="dev-btn" id="devFlashWindowBtn">🔥 FLASH: ?</button>
+    </div>
+
+    <div class="dev-divider"></div>
+
     <!-- Row 4: Online count simulation -->
     <div class="dev-row">
       <span class="dev-row-label">ONLINE</span>
@@ -1631,6 +1639,42 @@ function clearDim() {
   setTimeout(() => { dimOverlay?.remove(); dimOverlay = null; }, 3200);
 }
 document.getElementById('devDimBtn').onclick = () => adminStage(dimOverlay ? 'undim' : 'dim');
+
+// ── Flash window toggle (烧录窗口开关，默认开，host 手动关) ──
+// 状态服务端权威（profile DB 持久化）；切换走 /admin/flash-window（X-Admin-Token 重校）。
+let flashOpen = null;
+function renderFlashBtn() {
+  const b = document.getElementById('devFlashWindowBtn');
+  if (!b) return;
+  b.textContent = flashOpen === null ? '🔥 FLASH: ?'
+                : flashOpen ? '🔥 FLASH: OPEN' : '🔥 FLASH: CLOSED';
+}
+async function refreshFlashWindow() {
+  try {
+    const r = await fetch('/flash/tally');
+    if (r.ok) { const d = await r.json(); flashOpen = !!d.flash_open; renderFlashBtn(); }
+  } catch (e) {}
+}
+async function setFlashWindow(open) {
+  if (!adminToken) { showAdminPrompt('请先填写 Admin token'); return; }
+  try {
+    const r = await fetch('/admin/flash-window', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken },
+      body: JSON.stringify({ open }),
+    });
+    if (r.status === 401 || r.status === 403) {
+      adminToken = null; localStorage.removeItem(ADMIN_TOKEN_KEY);
+      showAdminPrompt('Token 失效，请重新填写'); return;
+    }
+    if (r.ok) { const d = await r.json(); flashOpen = !!d.flash_open; renderFlashBtn(); }
+  } catch (e) {}
+}
+{
+  const _fb = document.getElementById('devFlashWindowBtn');
+  if (_fb) _fb.onclick = () => setFlashWindow(!flashOpen);
+  refreshFlashWindow();
+}
 // ── Phase 3b: story dots ──────────────────────────────────
 const ISLE_COLORS = [
   '#b83828','#c87838','#b89820',  // Ember, Hearth, Spark

@@ -28,13 +28,13 @@ description: Loiter「Islands of Color」vibe-coding 烧录器——参与者打
 python scripts/flash.py flash --text "<参与者写的原文>"
 ```
 
-脚本会：`POST /flash/profile`（server 原子顺序轮转分岛 + 异步预生成文艺双语 reason）→ 拿 `profile_id` → 只 bake `LOITER_PROFILE_ID` 进 `firmware/src/user_profile.h` → 自动装 PlatformIO（如缺）→ 编译 → 烧录。
+脚本会：`POST /flash/profile`（server 原子顺序轮转分岛 + 异步预生成文艺双语 reason，并**随响应下发 broker 凭据**）→ 拿 `profile_id` → 从 `config.h.example` 生成 `config.h` 并写入 server 下发的 MQTT 信息 → 只 bake `LOITER_PROFILE_ID` 进 `firmware/src/user_profile.h` → 自动装 PlatformIO（如缺）→ 编译 → 烧录。
 
 - 设备用**数据线**连上（非充电线）。多台串口时加 `--port <口>`。
-- 需 `LOITER_FLASH_TOKEN`（工作坊密钥，引导员提供；也可 `--flash-token` 传）。
+- **零配置**：参与者只打一段文本，不需要任何 token / API key / 手填 broker（broker 凭据由 server 下发，WiFi 上电后在设备上配网）。
 - 想刷新到最新固件：加 `--pull`。只编译不烧（自测）：加 `--skip-upload`。
 
-> ⚠️ **server 必须在线**才能分岛（这是中心化设计的代价）。token 错/server 不可达会明确报错，不会静默烧一个没身份的设备。
+> ⚠️ **server 必须在线**才能分岛（这是中心化设计的代价）。烧录窗口关闭 / IP 超限 / server 不可达会明确报错，不会静默烧一个没身份的设备。
 
 ### Step 3 · 不剧透收尾
 
@@ -51,13 +51,14 @@ python scripts/flash.py flash --text "<参与者写的原文>"
 python scripts/flash.py doctor
 ```
 
-列出 OS / Python / PlatformIO / 串口候选 / server 可达性 / flash token 是否已设。
+列出 OS / Python / PlatformIO / 串口候选 / config.h 是否存在 / server 可达性 / flash 窗口开关状态。
 
 常见坑：
 - **看不到串口** → 装 CH9102/CP210x 驱动，换**数据线**，重插 USB。
 - **pio 找不到** → 脚本会自动 `pip install --user platformio`；PATH 没生效就重开终端或用 `python -m platformio`。
 - **Linux permission denied** → `sudo usermod -aG dialout $USER` 后重登。
-- **flash token 报错** → 设环境变量 `LOITER_FLASH_TOKEN`（引导员给）。
+- **烧录窗口已关闭（403）** → 让引导员在 admin 面板（`?admin=1` → FLASH 按钮）打开烧录窗口。
+- **IP 超限（429）** → 每 IP 每小时上限 50 次，稍等再试。
 
 ## 监控（引导员用）
 
@@ -67,6 +68,6 @@ python scripts/flash.py tally   # 各岛已创建 profile 数（只读公开）
 
 ## 边界
 
-- 脚本**只写 `user_profile.h`（仅 `LOITER_PROFILE_ID`），绝不碰 `config.h`**（WiFi/broker 密码在 config.h，gitignored）。
+- 脚本写 `config.h`（从 `config.h.example` + server 下发的 broker 凭据）和 `user_profile.h`（仅 `LOITER_PROFILE_ID`）；两者都 gitignored。WiFi 不写进 config.h，设备上电走 NVS 配网门户。
 - **原文不进二进制**：二进制里只有不可逆的 profile_id，原文/岛屿/reason 全在 server。
 - server base 可用 `--base` 或环境变量 `LOITER_FLASH_BASE` 覆盖（默认 `https://loiter.polly.wang`）。

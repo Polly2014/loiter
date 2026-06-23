@@ -1,27 +1,26 @@
-// config.h — 固件本地配置（从本文件拷贝：cp config.h.example config.h 后填入真实值）
-// ⚠️ config.h 已被 .gitignore，绝不提交真实 WiFi 密码到公开 repo。
+// config.h — 固件本地配置（gitignored）。
+//
+// 🔥 活动烧录：loiter-flash skill 会自动把本文件复制为 config.h 并写入 server 下发的
+//    MQTT_HOST/PORT/USER/PASS —— 参与者无需手填任何 broker 凭据。
+//    WiFi 不在这里填：设备上电后走 NVS 配网门户，参与者在设备上连现场 WiFi。
+//
+// 🛠 手动/本地开发：cp config.h.example config.h 后按需改下面的值。
+// ⚠️ config.h 已被 .gitignore，绝不提交真实密码到公开 repo。
 
 #pragma once
 
-// ============================================================
-// 验证路径 A（推荐）：Cardputer 和 Mac 共用「家庭 WiFi」
-//   - Mac 不断网，不用碰 Internet Sharing
-//   - 两者同一局域网，Cardputer 直接连 Mac 上的 broker
-//   - 把 WIFI_SSID/PASS 改成你家路由器的；MQTT_HOST 填 Mac 当前局域网 IP
-// ============================================================
-#define WIFI_SSID     "YOUR_WIFI_SSID"      // ← 改成你家路由器 SSID
-#define WIFI_PASS     "YOUR_WIFI_PASSWORD"  // ← 改成你家路由器密码
-#define MQTT_HOST     "192.168.x.x"         // ← Mac 在局域网上的 IP（en0：ipconfig getifaddr en0）
-#define MQTT_PORT     1883
+// ---- WiFi（占位即可：设备上电走 NVS 配网门户，运行时填真值会覆盖这里）----
+#define WIFI_SSID     "YOUR_WIFI_SSID"      // 占位；上机配网会覆盖
+#define WIFI_PASS     "YOUR_WIFI_PASSWORD"  // 占位；上机配网会覆盖
 
-// ============================================================
-// 验证路径 B（活动现场）：Mac 自建热点
-//   - 一张 WiFi 网卡不能同时上网 + 当热点 → Mac 会断网
-//   - 现场：USB-C 网口/手机 USB 给 Mac 上行，WiFi 当热点；
-//     或旅行路由器当 AP，Mac 网线连它
-//   - 用这条路径时改成：
-//       WIFI_SSID "loiter" / WIFI_PASS "loiter1234" / MQTT_HOST "192.168.2.1"
-// ============================================================
+// ---- MQTT broker（活动烧录时由 server 下发自动填写）----
+//   活动现场 = 公网 broker：MQTT_HOST "mqtt.polly.wang" / PORT 1883 / USER+PASS 由 server 下发
+//   本地开发 = Mac 局域网 broker：MQTT_HOST 填 Mac 局域网 IP（ipconfig getifaddr en0），
+//             broker 开匿名则 USER/PASS 留空字符串
+#define MQTT_HOST     "mqtt.polly.wang"     // 活动现场公网 broker（skill 用 server 值覆盖）
+#define MQTT_PORT     1883
+#define MQTT_USER     ""                    // broker 用户名（skill 用 server 下发值覆盖）
+#define MQTT_PASS     ""                    // broker 密码（skill 用 server 下发值覆盖）
 
 // ---- 本机身份 ----
 #define DEV_NICK      "cardputer-0"      // 临时昵称（/nick 可改）

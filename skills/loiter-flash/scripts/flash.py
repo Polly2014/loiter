@@ -32,7 +32,6 @@ import urllib.request
 from pathlib import Path
 
 DEFAULT_BASE = os.environ.get("LOITER_FLASH_BASE", "https://loiter.polly.wang")
-DEFAULT_FLASH_TOKEN = os.environ.get("LOITER_FLASH_TOKEN", "")
 PIO_ENV = "islands"
 HTTP_TIMEOUT = 8
 
@@ -78,6 +77,14 @@ def profile_header_path() -> Path:
     return firmware_dir() / "src" / "user_profile.h"
 
 
+def config_example_path() -> Path:
+    return firmware_dir() / "src" / "config.h.example"
+
+
+def config_path() -> Path:
+    return firmware_dir() / "src" / "config.h"
+
+
 # ── HTTP ─────────────────────────────────────────────────────────────────────
 def _http_json(method: str, url: str, payload: dict | None = None,
                headers: dict | None = None) -> tuple[int, dict | None]:
@@ -98,17 +105,18 @@ def _http_json(method: str, url: str, payload: dict | None = None,
         return 0, None
 
 
-def create_profile(base: str, text: str, flash_token: str) -> str:
-    """POST /flash/profile → profile_id（server 原子分岛 + 异步生 reason）。失败 die。"""
-    status, body = _http_json("POST", f"{base}/flash/profile", {"text": text},
-                              {"X-Flash-Token": flash_token})
-    if status == 401 or status == 403:
-        die("flash token 无效/缺失。设 LOITER_FLASH_TOKEN（引导员提供）或 --flash-token。")
+def create_profile(base: str, text: str) -> dict:
+    """POST /flash/profile → `{profile_id, mqtt:{host,port,user,pass}}`。零 token，受窗口+限流门控。失败 die。"""
+    status, body = _http_json("POST", f"{base}/flash/profile", {"text": text})
+    if status == 403:
+        die("烧录窗口已关闭。请让引导员在 admin 面板打开 Flash 窗口后重试。")
+    if status == 429:
+        die("你的 IP 烧录太频繁（每小时上限 50 次），稍等再试。")
     if status == 0:
         die(f"连不上 server（{base}）。检查网络 / --base，server 必须在线才能分岛。")
     if not isinstance(body, dict) or not body.get("profile_id"):
         die(f"server 返回异常（HTTP {status}）：{body}")
-    return body["profile_id"]
+    return body
 
 
 # ── pending profile 缓存（失败重烧复用同一 profile_id，不污染轮转 —— 修 Codex P1）──
@@ -171,6 +179,39 @@ def _purge_net_objects() -> None:
             dep.unlink()
         except OSError:
             pass
+
+
+# ── 写 config.h（broker 凭据由 server 下发，参与者零输入；WiFi 留占位走上机配网）──
+def _set_define(content: str, name: str, value: str) -> str:
+    """替换已存在的 `#define NAME ...` 行；不存在则追加。value 已含引号/数字格式。"""
+    line = f"#define {name}     {value}"
+    pat = re.compile(rf"^#define\s+{re.escape(name)}\b.*$", re.MULTILINE)
+    if pat.search(content):
+        return pat.sub(line, content)
+    return content.rstrip() + "\n" + line + "\n"
+
+
+def write_config_h(mqtt: dict) -> Path:
+    """从 config.h.example 复制为 config.h，并把 server 下发的 broker 凭据注入。
+
+    WiFi 字段保持 example 里的占位（设备上电后走 NVS 配网门户让参与者填）。
+    每次烧录都重写 → 保证参与者拿到与当前 server 一致的 broker，零手动配置。
+    """
+    ex = config_example_path()
+    if not ex.exists():
+        die(f"找不到 config.h.example：{ex}")
+    content = ex.read_text(encoding="utf-8")
+    host = str(mqtt.get("host") or "mqtt.polly.wang")
+    port = int(mqtt.get("port") or 1883)
+    user = str(mqtt.get("user") or "")
+    pwd = str(mqtt.get("pass") or "")
+    content = _set_define(content, "MQTT_HOST", f'"{host}"')
+    content = _set_define(content, "MQTT_PORT", str(port))
+    content = _set_define(content, "MQTT_USER", f'"{user}"')
+    content = _set_define(content, "MQTT_PASS", f'"{pwd}"')
+    cfg = config_path()
+    cfg.write_text(content, encoding="utf-8")
+    return cfg
 
 
 # ── PlatformIO 自举 ──────────────────────────────────────────────────────────
@@ -265,9 +306,11 @@ def cmd_doctor(args) -> None:
     print(f"PlatformIO : {'OK → ' + ' '.join(pio) if pio else '✗ 未安装（flash 时会自动装）'}")
     print(f"串口候选   : {detect_ports() or '（未发现，连上 M5 数据线再试）'}")
     print(f"固件目录   : {firmware_dir()}")
+    print(f"config.h   : {'OK' if config_path().exists() else '✗ 不存在（flash 时从 example + server 凭据生成）'}")
     status, body = _http_json("GET", f"{args.base}/flash/tally")
     print(f"server     : {args.base}  → {'OK' if body is not None else f'HTTP {status} / 不可达'}")
-    print(f"flash token: {'已设' if (args.flash_token) else '✗ 未设（flash 会失败）'}")
+    fw = (body or {}).get("flash_open") if isinstance(body, dict) else None
+    print(f"flash 窗口 : {'OPEN' if fw else ('CLOSED（让引导员打开）' if fw is False else '未知')}")
     print(f"提示       : {driver_hint()}")
 
 
@@ -279,7 +322,9 @@ def cmd_flash(args) -> None:
         git_pull(repo_root())
 
     # 1) 拿 profile_id：--profile-id 指定 / 复用上次未完成的（同文本）/ 否则新建
+    #    新建时 server 一并下发 broker 凭据 → 写 config.h（参与者零输入）
     pid = args.profile_id
+    mqtt = None
     if pid:
         if not _PID_RE.match(pid):
             die(f"--profile-id 非法（应为 32 位 hex）：{pid!r}")
@@ -290,11 +335,21 @@ def cmd_flash(args) -> None:
             pid = pend["profile_id"]
             print("· 复用上次未完成的 profile（避免轮转污染）")
         else:
-            pid = create_profile(args.base, args.text, args.flash_token)
+            prof = create_profile(args.base, args.text)
+            pid = prof["profile_id"]
+            mqtt = prof.get("mqtt")
             _save_pending({"profile_id": pid, "text_sha256": _sha(args.text)})
             print("· 已建 profile [server]")
 
-    # 2) 只 bake profile_id（不剧透：脚本不知道岛屿/reason）
+    # 2) 写 config.h：有 server 下发的 broker 凭据就刷新；否则要求 config.h 已就位
+    if mqtt:
+        write_config_h(mqtt)
+        print("· 已写 config.h（broker 来自 server，WiFi 上机配网）")
+    elif not config_path().exists():
+        die("config.h 缺失：去掉 --profile-id/--new 让 server 下发 broker 凭据，"
+            "或手动 cp firmware/src/config.h.example firmware/src/config.h 后填 MQTT。")
+
+    # 3) 只 bake profile_id（不剧透：脚本不知道岛屿/reason）
     write_profile(pid)
     print("· 已写 user_profile.h")
 
@@ -319,13 +374,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.set_defaults(func=cmd_tally)
 
     sp = sub.add_parser("doctor", help="环境体检")
-    sp.add_argument("--flash-token", default=DEFAULT_FLASH_TOKEN)
     sp.set_defaults(func=cmd_doctor)
 
     sp = sub.add_parser("flash", help="POST /flash/profile → 写 header → 编译 → 烧录")
     sp.add_argument("--text", required=True, help="参与者随便写的一段话（喂 server 分岛 + reason）")
-    sp.add_argument("--flash-token", default=DEFAULT_FLASH_TOKEN,
-                    help="烧录鉴权 token（默认读环境变量 LOITER_FLASH_TOKEN；引导员提供）")
     sp.add_argument("--profile-id", default=None, help="复用指定 profile_id（重烧某设备身份）")
     sp.add_argument("--new", action="store_true", help="强制新建 profile（忽略 pending 复用）")
     sp.add_argument("--port", default=None, help="指定烧录串口（默认 pio 自动选）")

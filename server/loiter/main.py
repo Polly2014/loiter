@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import asyncio
+import collections
 import contextlib
 import json
 import logging
 import time
 
-from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -68,6 +69,7 @@ async def healthz():
         "online": room.count,
         "ws_clients": ws_manager.count,
         "broker": f"{config.MQTT_HOST}:{config.MQTT_PORT}",
+        "flash_open": _profile_store.get_flash_open(),
     }
 
 
@@ -141,17 +143,36 @@ def _tally_payload() -> dict:
     return {
         "tally": {str(i): counts.get(i, 0) for i in range(_FLASH_N)},
         "names": {str(isle.idx): isle.name for isle in ISLANDS},
+        "flash_open": _profile_store.get_flash_open(),
     }
 
 
-def _check_flash(token: str | None) -> None:
-    """烧录写鉴权 — fail-closed：未配 FLASH_TOKEN 拒绝所有写；配了则常量时间比对。"""
-    import secrets
-    expected = config.FLASH_TOKEN
-    if not expected:
-        raise HTTPException(status_code=403, detail="flash disabled (no token configured)")
-    if not token or not secrets.compare_digest(token, expected):
-        raise HTTPException(status_code=401, detail="bad flash token")
+# 烧录限流：每 IP 滑动窗口（内存态，重启清零——防滥用闸门，非硬配额）。
+# Cloudflare tunnel 后真实客户 IP 在 CF-Connecting-IP；uvicorn 看到的 client 是 tunnel 本地。
+_flash_hits: dict[str, collections.deque] = {}
+
+
+def _client_ip(request: Request) -> str:
+    cf = request.headers.get("cf-connecting-ip")
+    if cf:
+        return cf.strip()
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "?"
+
+
+def _flash_rate_ok(ip: str) -> bool:
+    """每 IP 每小时 FLASH_RATE_PER_HOUR 次。超过 → False。"""
+    now = time.time()
+    dq = _flash_hits.setdefault(ip, collections.deque())
+    cutoff = now - 3600
+    while dq and dq[0] < cutoff:
+        dq.popleft()
+    if len(dq) >= config.FLASH_RATE_PER_HOUR:
+        return False
+    dq.append(now)
+    return True
 
 
 def _gen_reason_blocking(pid: str, text: str, island: int) -> None:
@@ -169,19 +190,47 @@ def _gen_reason_blocking(pid: str, text: str, island: int) -> None:
 
 
 @app.post("/flash/profile")
-async def flash_profile(body: dict | None = None, x_flash_token: str | None = Header(default=None)):
-    """烧录时建 profile：原子顺序轮转分岛 + 异步预生成文艺 reason。
+async def flash_profile(request: Request, body: dict | None = None):
+    """烧录时建 profile：原子顺序轮转分岛 + 异步预生成文艺 reason，并随响应下发 broker 凭据。
 
-    body `{"text": "..."}`。返回 `{ok, profile_id}` —— **不返回 island/reason（不剧透）**。
+    零 token：受「烧录窗口开（host 控） + 每 IP 限流」双门控。
+    body `{"text": "..."}`。返回 `{ok, profile_id, mqtt:{host,port,user,pass}}`
+    —— **不返回 island/reason（不剧透）**；mqtt 让 skill 写 config.h，参与者零输入凭据。
     """
-    _check_flash(x_flash_token)
+    if not _profile_store.get_flash_open():
+        raise HTTPException(status_code=403, detail="flash window closed — ask your host to open it")
+    if not _flash_rate_ok(_client_ip(request)):
+        raise HTTPException(status_code=429, detail="too many flashes from your IP, slow down")
     text = (body or {}).get("text", "")
     if not isinstance(text, str):
         raise HTTPException(status_code=400, detail="text (str) required")
     p = _profile_store.create(text)
     # 编译/烧录窗口内异步生成 reason（join 时已就绪 → 揭晓零延迟）
     asyncio.get_running_loop().run_in_executor(None, _gen_reason_blocking, p["profile_id"], text, p["island"])
-    return {"ok": True, "profile_id": p["profile_id"]}
+    return {
+        "ok": True,
+        "profile_id": p["profile_id"],
+        "mqtt": {
+            "host": config.FLASH_MQTT_HOST,
+            "port": config.FLASH_MQTT_PORT,
+            "user": config.MQTT_USER,
+            "pass": config.MQTT_PASS,
+        },
+    }
+
+
+@app.post("/admin/flash-window")
+async def admin_flash_window(
+    body: dict | None = None,
+    x_admin_token: str | None = Header(default=None),
+):
+    """host 开/关烧录窗口（默认开，状态持久化）。body `{"open": true|false}`，token 走 X-Admin-Token 头。"""
+    _check_admin(x_admin_token)
+    open_ = (body or {}).get("open")
+    if not isinstance(open_, bool):
+        raise HTTPException(status_code=400, detail="open (bool) required")
+    _profile_store.set_flash_open(open_)
+    return {"ok": True, "flash_open": open_}
 
 
 @app.get("/flash/tally")

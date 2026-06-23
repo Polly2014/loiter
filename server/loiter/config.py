@@ -22,10 +22,17 @@ INSTANCE_NAME = os.getenv("LOITER_INSTANCE", "GLEAM Hall")
 # VM 侧在 /etc/loiter/loiter.env 配 LOITER_ADMIN_TOKEN=...，本地测试 export 一下。
 ADMIN_TOKEN = os.getenv("LOITER_ADMIN_TOKEN", "").strip()
 
-# --- 烧录占坑写鉴权（v3 loiter-flash skill 的 reserve/commit/release）---
-# 空 = fail-closed：未配则拒绝所有占坑写（GET /flash/tally 只读保持公开）。
-# 工作坊密钥，发给参与者（与 admin token 分开）。VM 侧走 /etc/loiter/loiter.env。
-FLASH_TOKEN = os.getenv("LOITER_FLASH_TOKEN", "").strip()
+# --- 烧录窗口（v3″：零 token，host 控开窗，默认开，状态持久化在 profile DB meta）---
+# /flash/profile 受「窗口开 + 每 IP 限流」双门控；关窗 → 拒绝建 profile。
+# 窗口开/关由 host 在 admin 面板（POST /admin/flash-window）切换，跨重启不丢。
+FLASH_RATE_PER_HOUR = int(os.getenv("LOITER_FLASH_RATE_PER_HOUR", "50"))
+
+# 烧录时随 profile 下发给设备 config.h 的 broker 连接信息。
+# 设备连「公网 broker」，与 server 自身连「本地 broker」(MQTT_HOST=127.0.0.1) 不同 → 单列。
+# user/pass 复用 MQTT_USER/MQTT_PASS（broker 鉴权同一套），由 /etc/loiter/loiter.env 注入，
+# 不在 repo 里硬编码；窗口关闭时不下发。
+FLASH_MQTT_HOST = os.getenv("LOITER_FLASH_MQTT_HOST", "mqtt.polly.wang")
+FLASH_MQTT_PORT = int(os.getenv("LOITER_FLASH_MQTT_PORT", "1883"))
 
 # --- HTTP / WebSocket ---
 HTTP_HOST = os.getenv("LOITER_HTTP_HOST", "0.0.0.0")

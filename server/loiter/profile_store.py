@@ -145,6 +145,24 @@ class ProfileStore:
             self._db.execute("DELETE FROM meta")
             self._db.commit()
 
+    # --- 烧录窗口开关（host 控场，默认开，持久化在 meta；重启不丢）---
+    def get_flash_open(self) -> bool:
+        """烧录窗口是否开启。meta 无记录 → 默认 True（default-open）。"""
+        with self._lock:
+            row = self._db.execute("SELECT value FROM meta WHERE key='flash_open'").fetchone()
+        return True if row is None else bool(row["value"])
+
+    def set_flash_open(self, open_: bool) -> None:
+        """host 开/关烧录窗口，持久化（reset 会清 meta → 回到默认 open，符合赛前清零语义）。"""
+        v = 1 if open_ else 0
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO meta(key, value) VALUES('flash_open', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=?",
+                (v, v),
+            )
+            self._db.commit()
+
 
 # 进程级单例（main.py 端点 + mqtt_bridge join 共用）
 store = ProfileStore(config.PROFILE_DB)
