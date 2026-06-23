@@ -34,6 +34,10 @@ from pathlib import Path
 DEFAULT_BASE = os.environ.get("LOITER_FLASH_BASE", "https://loiter.polly.wang")
 PIO_ENV = "islands"
 HTTP_TIMEOUT = 8
+# Cloudflare bot-fight 封默认 `Python-urllib/x.y` UA（返回 403 error code 1010）→ 必须伪装成浏览器 UA，
+# 否则每台参与者机器都会被拦、且被误报成"烧录窗口已关闭"。
+_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+       "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36")
 
 # 本地 pending：已 POST 建 profile 但烧录未成功时缓存 profile_id，重烧复用（不污染轮转）
 LOCAL_STATE_DIR = Path(os.environ.get("LOITER_FLASH_STATE", str(Path.home() / ".loiter-flash")))
@@ -92,6 +96,7 @@ def _http_json(method: str, url: str, payload: dict | None = None,
     data = json.dumps(payload).encode() if payload is not None else None
     req = urllib.request.Request(url, data=data, method=method)
     req.add_header("Content-Type", "application/json")
+    req.add_header("User-Agent", _UA)  # 绕开 Cloudflare bot-fight 对 Python-urllib UA 的 403
     for k, v in (headers or {}).items():
         if v:
             req.add_header(k, v)
