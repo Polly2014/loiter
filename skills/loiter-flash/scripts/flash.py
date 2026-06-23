@@ -43,6 +43,10 @@ _UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
 LOCAL_STATE_DIR = Path(os.environ.get("LOITER_FLASH_STATE", str(Path.home() / ".loiter-flash")))
 PENDING_FILE = LOCAL_STATE_DIR / "pending.json"
 
+# 普通用户只拿到 skill（不需手动 clone 整个 repo）→ 首次 flash 自动克隆固件仓到本地缓存
+REPO_URL = os.environ.get("LOITER_REPO_URL", "https://github.com/Polly2014/loiter.git")
+CACHE_REPO_DIR = Path(os.environ.get("LOITER_REPO_CACHE", str(LOCAL_STATE_DIR / "loiter")))
+
 # profile_id = server 生的 uuid4.hex（32 位 hex）。严格校验，不静默改写（Codex P3）
 _PID_RE = re.compile(r"^[a-f0-9]{32}$")
 
@@ -70,7 +74,50 @@ def repo_root() -> Path:
     for cand in here.parents:
         if (cand / "firmware" / "platformio.ini").exists():
             return cand
-    die("找不到 loiter 仓根（向上没有 firmware/platformio.ini）；可设 LOITER_REPO 显式指定。")
+    # 普通用户：只拿到 skill，不在 repo checkout 内 → 自动克隆/更新公共固件仓到缓存
+    return ensure_cached_repo()
+
+
+def ensure_cached_repo() -> Path:
+    """未在 repo checkout 内时，把公共固件仓克隆到 `~/.loiter-flash/loiter`。
+
+    已存在 → best-effort `git pull`（离线/冲突不致命，用本地缓存继续）。
+    让“只分享 skill”的普通用户零 clone：首次跑自动拉仓。
+    """
+    repo = CACHE_REPO_DIR
+    pio = repo / "firmware" / "platformio.ini"
+    if not shutil.which("git"):
+        die("未找到 git。请先装 git（macOS: `xcode-select --install`；Linux: `apt install git`）。")
+    if pio.exists():
+        proc = subprocess.run(["git", "-C", str(repo), "pull", "--ff-only"],
+                              capture_output=True, text=True)
+        if proc.returncode != 0:
+            print(f"  ⚠ 固件仓 git pull 跳过（{proc.stderr.strip() or '离线/non-ff'}），用本地缓存继续。")
+        return repo
+    repo.parent.mkdir(parents=True, exist_ok=True)
+    print(f"· 首次运行：克隆 loiter 固件仓 → {repo}（一次性，后续复用）…")
+    proc = subprocess.run(["git", "clone", "--depth", "1", REPO_URL, str(repo)])
+    if proc.returncode != 0 or not pio.exists():
+        die(f"git clone 失败（{REPO_URL}）。检查网络，或手动 git clone 后设 LOITER_REPO 指向它。")
+    return repo
+
+
+def _find_repo_no_clone() -> Path | None:
+    """探测固件仓位置但**不触发克隆**（doctor 用，避免体检时意外拉几 MB）。"""
+    env = os.environ.get("LOITER_REPO")
+    if env and (Path(env).expanduser() / "firmware" / "platformio.ini").exists():
+        return Path(env).expanduser().resolve()
+    for cand in Path(__file__).resolve().parents:
+        if (cand / "firmware" / "platformio.ini").exists():
+            return cand
+    if (CACHE_REPO_DIR / "firmware" / "platformio.ini").exists():
+        return CACHE_REPO_DIR
+    return None
+
+
+def _repo_status() -> str:
+    r = _find_repo_no_clone()
+    return str(r) if r else f"未克隆（flash 时自动 clone 到 {CACHE_REPO_DIR}）"
 
 
 def firmware_dir() -> Path:
@@ -307,11 +354,14 @@ def cmd_tally(args) -> None:
 def cmd_doctor(args) -> None:
     print(f"OS         : {platform.system()} {platform.release()} ({platform.machine()})")
     print(f"Python     : {sys.version.split()[0]} @ {sys.executable}")
+    print(f"git        : {'OK → ' + (shutil.which('git') or '') if shutil.which('git') else '✗ 未安装（自动克隆固件仓需要）'}")
     pio = find_pio()
     print(f"PlatformIO : {'OK → ' + ' '.join(pio) if pio else '✗ 未安装（flash 时会自动装）'}")
     print(f"串口候选   : {detect_ports() or '（未发现，连上 M5 数据线再试）'}")
-    print(f"固件目录   : {firmware_dir()}")
-    print(f"config.h   : {'OK' if config_path().exists() else '✗ 不存在（flash 时从 example + server 凭据生成）'}")
+    print(f"固件仓     : {_repo_status()}")
+    _repo = _find_repo_no_clone()
+    cfg_ok = bool(_repo and (_repo / "firmware" / "src" / "config.h").exists())
+    print(f"config.h   : {'OK' if cfg_ok else '✗ 不存在（flash 时从 example + server 凭据生成）'}")
     status, body = _http_json("GET", f"{args.base}/flash/tally")
     print(f"server     : {args.base}  → {'OK' if body is not None else f'HTTP {status} / 不可达'}")
     fw = (body or {}).get("flash_open") if isinstance(body, dict) else None

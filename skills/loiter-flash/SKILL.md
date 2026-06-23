@@ -28,11 +28,12 @@ description: Loiter「Islands of Color」vibe-coding 烧录器——参与者打
 python scripts/flash.py flash --text "<参与者写的原文>"
 ```
 
-脚本会：`POST /flash/profile`（server 原子顺序轮转分岛 + 异步预生成文艺双语 reason，并**随响应下发 broker 凭据**）→ 拿 `profile_id` → 从 `config.h.example` 生成 `config.h` 并写入 server 下发的 MQTT 信息 → 只 bake `LOITER_PROFILE_ID` 进 `firmware/src/user_profile.h` → 自动装 PlatformIO（如缺）→ 编译 → 烧录。
+脚本会：**（首次）自动 `git clone` loiter 固件仓到 `~/.loiter-flash/loiter`**→ `POST /flash/profile`（server 原子顺序轮转分岛 + 异步预生成文艺双语 reason，并**随响应下发 broker 凭据**）→ 拿 `profile_id` → 从 `config.h.example` 生成 `config.h` 并写入 server 下发的 MQTT 信息 → 只 bake `LOITER_PROFILE_ID` 进 `firmware/src/user_profile.h` → 自动装 PlatformIO（如缺）→ 编译 → 烧录。
 
+- **只需分享这个 skill**：用户不用手动下载/clone repo。首次 `flash` 会自动拉取公共固件仓（`github.com/Polly2014/loiter`）到本地缓存，后续复用；只需装了 **git**。（开发态：若 skill 本身在 repo checkout 内，直接用该 repo；也可用 `LOITER_REPO` 显式指定。）
 - 设备用**数据线**连上（非充电线）。多台串口时加 `--port <口>`。
 - **零配置**：参与者只打一段文本，不需要任何 token / API key / 手填 broker（broker 凭据由 server 下发，WiFi 上电后在设备上配网）。
-- 想刷新到最新固件：加 `--pull`。只编译不烧（自测）：加 `--skip-upload`。
+- 想刷新到最新固件：加 `--pull`（缓存仓平时也会 best-effort 自动拉）。只编译不烧（自测）：加 `--skip-upload`。
 
 > ⚠️ **server 必须在线**才能分岛（这是中心化设计的代价）。烧录窗口关闭 / IP 超限 / server 不可达会明确报错，不会静默烧一个没身份的设备。
 
