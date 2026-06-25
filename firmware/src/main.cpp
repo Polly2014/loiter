@@ -3377,49 +3377,6 @@ void setup() {
 static bool g_prev_del = false;
 static uint32_t g_last_anim_redraw = 0;
 
-// Reset all participant state and go to Welcome (dev key R)
-static void restart_all() {
-    net_publish_leave();   // 通知服务端清除旧旅程（island/spectrum），重新输名 = 全新 member（review Codex P1/P2）
-    g_username[0] = '\0';
-    g_username_len = 0;
-    g_island = -1;
-    g_island_ready = false;
-    g_island_reason_en[0] = '\0';
-    g_island_reason_cn[0] = '\0';
-    g_island_req_ms = 0;
-    g_island_last_req_ms = 0;
-    g_island_warned = false;
-    g_joined = false;   // dev reset 回大厅：停心跳，重新输名后再起
-    g_shape[0] = 0; g_shape[1] = 0; g_shape[2] = 0; g_shape[3] = 1; g_shape[4] = 0;
-    g_color[0] = 0; g_color[1] = 0; g_color[2] = 0; g_color[3] = 0; g_color[4] = 0;
-    for (int i = 0; i < 5; ++i) g_collection[i] = -1;
-    g_sig_action = -1;
-    g_sig_particle = -1;
-    for (int i = 0; i < 4; i++) g_sig_owned[i] = false;
-    g_reroll_count = 0;
-    g_say_text[0] = '\0';
-    g_say_len = 0;
-    g_reading_page = 0;
-    clear_reading_state();   // 清上一段旅程的 reading 缓存（防 dev reset 后 P3-01 ready guard 直跳旧 reading，review Codex#2）
-    g_arrival_state = ARRIVAL_LOADING;
-    g_quest_state = QUEST_PROMPT;
-    g_quest_energy = 0;
-    goto_screen(P1_01_WELCOME);
-}
-
-// Fill missing state with dev defaults so Phase 2/3 jumps render correctly
-static void fill_dev_state() {
-    if (g_username_len == 0) { strcpy(g_username, "DEV"); g_username_len = 3; }
-    if (g_island < 0) g_island = random(0, 6);
-    if (g_collection[0] < 0) {
-        g_collection[0] = g_island;
-        g_collection[1] = random(0, 6);
-        g_collection[2] = random(0, 6);
-        g_collection[3] = -1;
-        g_collection[4] = -1;
-    }
-}
-
 // ── 心跳自愈 ──────────────────────────────────────────────────────────
 // 服务端是纯内存态：意外重启会清空 room → 设备的 MQTT 连接还活着（不触发重连 →
 // 不重发 join）→ 小人从大屏消失且不会自动回来。心跳定期重发 join，让服务端据 baked
@@ -3462,17 +3419,6 @@ void loop() {
     g_prev_keys  = current_keys;
     g_prev_enter = status.enter;
     g_prev_del   = status.del;
-
-    // ── Global dev keys（仅 dev 构建 `-e islands-dev` 启用；参与者 `islands` 构建无此键，
-    //    防误触 '1' 触发 restart_all+leave 把自己踢下大屏，线下实测 P0 — 2026-06-25）──
-#if defined(LOITER_DEV_KEYS)
-    bool in_text_input = (g_screen == P1_02_USERNAME) || (g_screen == P2_06_SAY_INPUT);
-    if (!in_text_input) {
-        if (new_keys.count('1')) { restart_all(); return; }
-        if (new_keys.count('2')) { fill_dev_state(); goto_screen(P2_01_LIVE_MIRROR); return; }
-        if (new_keys.count('3')) { fill_dev_state(); goto_screen(P3_01_WAITING); return; }
-    }
-#endif
 
     // Dispatch input
     dispatch_input(new_keys, enter_pressed, del_pressed);
