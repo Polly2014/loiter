@@ -43,6 +43,9 @@ class MqttBridge:
         self._prox_last: dict[tuple[str, str], float] = {}
         self._recent_shake: dict[str, float] = {}  # uid -> last proximity shake time (monotonic)
         self._jump_last_burst = 0.0
+        # Host 控场的持久态（dim/reveal/photo 是开关，jump 是瞬时）。后连入的大屏/观众页
+        # 从 snapshot 拿到当前态做追赶，避免「reveal 后才打开的浏览器看不到 story」(P1-2)。
+        self._stage = {"dim": False, "reveal": False, "photo": False}
         # Phase 3 reading 生成走线程池（CopilotX 调用阻塞，不能占 paho 网络线程）；
         # max_workers=5 限并发，防同时多人触发打爆 CopilotX。
         self._reading_pool = ThreadPoolExecutor(max_workers=5, thread_name_prefix="reading")
@@ -827,11 +830,26 @@ class MqttBridge:
         self.client.publish(config.topic("phase"), json.dumps({"phase": phase}), qos=1, retain=True)
         self._emit({"type": "phase_change", "phase": phase, "ts": now_ms()})
 
+    # action -> (stage key, on/off)：开关型动作先更新持久态，再广播。
+    _STAGE_TOGGLE = {
+        "dim": ("dim", True), "undim": ("dim", False),
+        "reveal": ("reveal", True), "unreveal": ("reveal", False),
+        "photo": ("photo", True), "unphoto": ("photo", False),
+    }
+
+    def stage_state(self) -> dict:
+        """当前 Host 控场持久态（供 snapshot 给晚到客户端追赶）。"""
+        return dict(self._stage)
+
     def emit_stage(self, action: str) -> None:
         """Admin 控场动作（DIM/REVEAL/PHOTO 等）→ WS 广播给所有大屏 + 观众页同步。
 
         纯 WS 视觉效果，不落 MQTT（设备不关心）。鉴权在 HTTP 端点 /admin/stage 做。
+        开关型动作（dim/reveal/photo）同步更新持久态 → 后连入客户端从 snapshot 追赶（P1-2）。
         """
+        toggle = self._STAGE_TOGGLE.get(action)
+        if toggle is not None:
+            self._stage[toggle[0]] = toggle[1]
         self._emit({"type": "stage", "action": action, "ts": now_ms()})
 
     def publish_notice(self, text: str, level: str = "info") -> None:

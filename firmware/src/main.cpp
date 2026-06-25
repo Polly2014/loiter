@@ -3448,13 +3448,16 @@ void loop() {
     g_prev_enter = status.enter;
     g_prev_del   = status.del;
 
-    // ── Global dev keys (work outside text-input screens) ──────────────
+    // ── Global dev keys（仅 dev 构建 `-e islands-dev` 启用；参与者 `islands` 构建无此键，
+    //    防误触 '1' 触发 restart_all+leave 把自己踢下大屏，线下实测 P0 — 2026-06-25）──
+#if defined(LOITER_DEV_KEYS)
     bool in_text_input = (g_screen == P1_02_USERNAME) || (g_screen == P2_06_SAY_INPUT);
     if (!in_text_input) {
         if (new_keys.count('1')) { restart_all(); return; }
         if (new_keys.count('2')) { fill_dev_state(); goto_screen(P2_01_LIVE_MIRROR); return; }
         if (new_keys.count('3')) { fill_dev_state(); goto_screen(P3_01_WAITING); return; }
     }
+#endif
 
     // Dispatch input
     dispatch_input(new_keys, enter_pressed, del_pressed);

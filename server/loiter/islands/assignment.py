@@ -60,11 +60,19 @@ _ISLAND_R = 70  # 岛内散布半径（逻辑像素）
 
 
 def island_spawn_point(island_idx: int, seq: int) -> tuple[float, float]:
-    """岛屿中心 + 确定性散布（按入岛序号螺旋偏移），避免多人完全重叠。"""
+    """岛屿中心 + 确定性环形散布，避免多人重叠。
+
+    线下实测（2026-06-25）：旧黄金角散布在低 seq 下半径太小（seq1 仅 ~26 逻辑像素），
+    而小人 sprite 宽 32px → 同岛 2 人「两位一体」拆不开。改环形分布：seq0 居中，其余
+    每环 6 人、首环半径 90px（≈3×sprite 宽，确保分得开），环间距 78px，奇数环错半格。
+    16 人 / 6 岛 ≈ 每岛 ≤3 人，基本都在首环，两两 ≥90px 分得很开。
+    """
     import math
     cx, cy = ISLAND_CENTERS.get(island_idx, (960, 540))
     if seq <= 0:
-        return (float(cx), float(cy))
-    ang = seq * 2.399963  # 黄金角，均匀铺开
-    rad = _ISLAND_R * min(1.0, 0.25 + 0.12 * seq)
+        return (float(cx), float(cy))   # 第一人居中（独自登岛时居中好看）
+    ring = (seq - 1) // 6               # 0,1,2…
+    pos = (seq - 1) % 6
+    ang = (pos + 0.5 * (ring % 2)) * (2 * math.pi / 6)   # 奇数环错半格，避免与内环对齐
+    rad = 90.0 + 78.0 * ring
     return (cx + rad * math.cos(ang), cy + rad * math.sin(ang))

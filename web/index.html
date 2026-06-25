@@ -2163,6 +2163,13 @@ function handleWsEvent(ev) {
       });
       _setOnlineCount(ev.count != null ? ev.count : wsChars.size);
       log(`◈ Snapshot · ${ev.count != null ? ev.count : wsChars.size} online`, 'log-conn');
+      // 追赶 host 控场持久态 → 晚到/刷新的浏览器也能看到当前 reveal/dim/photo（P1-2）
+      if (ev.stage) {
+        if (ev.stage.dim) triggerDim(); else clearDim();
+        if (ev.stage.reveal) { if (!storyDotsActive) showStoryDots(); }
+        else if (storyDotsActive) clearStoryDots();
+        if (ev.stage.photo) enterPhotoMode(); else exitPhotoMode();
+      }
       break;
     case 'join':
       wsSpawn(ev.uid, ev.nick, ev.island, null, null, ev.avatar || null);

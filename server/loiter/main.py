@@ -250,8 +250,10 @@ async def flash_reset(x_admin_token: str | None = Header(default=None)):
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket):
     await ws_manager.connect(ws)
-    # 新连接立即推一份全量快照
+    # 新连接立即推一份全量快照（含 host 控场 stage 状态 → 晚到客户端追赶 reveal/dim/photo，P1-2）
     snap = {"type": "snapshot", **room.snapshot()}
+    if bridge is not None:
+        snap["stage"] = bridge.stage_state()
     await ws.send_json(snap)
     try:
         while True:
