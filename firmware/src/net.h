@@ -27,8 +27,8 @@ struct NetCallbacks {
     void (*on_reading)(const char* title, const char* title_cn, const char* core_cn,
                        const char* lines[9], const char* lines_cn[9]);
     // 匿名公屏（anon → 大屏为主，设备可选显示）
-    void (*on_anon)(const char* text);
-    // 近距 shake 交换成功 → 复制到的对方 sig（particle/action）+ 对方昵称
+    void (*on_anon)(const char* text);    // 集体 JUMP 实时进度（jump/progress 广播）——窗口内正在跳的人数 count / 阈值 need
+    void (*on_jump_progress)(int count, int need);    // 近距 shake 交换成功 → 复制到的对方 sig（particle/action）+ 对方昵称
     void (*on_sig_recv)(int particle, int action, const char* from_nick);
     // 配网全屏接管结束后，请 UI 重绘当前屏
     void (*redraw)();

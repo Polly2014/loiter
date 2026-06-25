@@ -552,9 +552,9 @@ class MqttBridge:
             "ts": now_ms(),
         })
 
-    PROX_HI_DISTANCE = 170.0
+    PROX_HI_DISTANCE = 400.0    # 放宽：覆盖相邻岛（岛心间距最近 ~336px）——让「物理靠近但不同岛」两人能交换 sig（P1-1）
     PROX_HI_COOLDOWN = 4.0
-    PROX_SHAKE_WINDOW = 1.5     # 双方 shake 必须落在这个时间窗内才算"同时晃动"（参考 v1 PAIR_SHAKE_TOLERANCE_S）
+    PROX_SHAKE_WINDOW = 2.5     # 放宽：双方同时晃动容差 1.5→2.5s，便于双人协调（参考 v1 PAIR_SHAKE_TOLERANCE_S）
 
     def _try_sig_exchange(self, uid: str) -> bool:
         """近距 shake 复制 sig：两人靠近 + 双方都在 PROX_SHAKE_WINDOW 内 shake →
@@ -649,9 +649,13 @@ class MqttBridge:
         uid = data.get("uid")
         if not uid or uid not in self.room.members:
             return
-        # Per-person bounce on big screen
-        self._emit({"type": "jump", "uid": uid, "ts": now_ms()})
         n = self.jump.add(uid)
+        need = self.jump.TRIGGER_MIN
+        # 大屏：个人弹跳 + 携实时「正在一起跳的人数」（P1-3：之前大屏/设备都没真人数）
+        self._emit({"type": "jump", "uid": uid, "count": n, "need": need, "ts": now_ms()})
+        # 广播实时进度给所有设备 → P2-07 跳跃屏显真 N/5（替换旧的本地假倒计时 elapsed/2000）
+        self.client.publish(config.topic("jump", "progress"),
+                            json.dumps({"count": n, "need": need}), qos=0)
         if self.jump.should_burst() and time.monotonic() - self._jump_last_burst > 3.0:
             self._jump_last_burst = time.monotonic()
             log.info("JUMP burst (n=%d)", n)

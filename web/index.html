@@ -772,6 +772,32 @@ html, body {
   100% { opacity: 0; }
 }
 
+/* ── JUMP live counter — 实时"正在一起跳的人数"（P1-3，Designer 像素风）── */
+#jumpLive {
+  position: fixed;
+  top: 14%; left: 50%;
+  transform: translateX(-50%) scale(.9);
+  z-index: 450; pointer-events: none;
+  display: none;
+  background: #1e1a30;
+  border: 3px solid #f8e1a0;
+  box-shadow: 0 0 0 1px #0a0e20, 5px 5px 0 #0a0e20;
+  padding: 10px 18px;
+  font-family: 'Press Start 2P', monospace;
+  color: #f8e1a0;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  text-align: center;
+}
+#jumpLive.show { display: block; animation: jumpLivePop .25s ease-out; }
+#jumpLive .jl-count { font-size: 22px; color: #ffe9b0; }
+#jumpLive .jl-label { font-size: 9px; color: rgba(216,226,244,.7); display: block; margin-top: 6px; }
+@keyframes jumpLivePop {
+  0%   { transform: translateX(-50%) scale(.7); }
+  60%  { transform: translateX(-50%) scale(1.08); }
+  100% { transform: translateX(-50%) scale(1); }
+}
+
 /* ── Floating message card — pixel art style ────────────── */
 .float-stage {
   position: absolute;
@@ -1072,7 +1098,8 @@ html, body {
 
 <!-- JUMP particle canvas (full-screen fixed overlay) -->
 <canvas id="jumpCanvas"></canvas>
-
+<!-- JUMP live counter — 实时正在一起跳的人数（P1-3） -->
+<div id="jumpLive"><span class="jl-count">0</span><span class="jl-label">JUMPING TOGETHER</span></div>
 <!-- Admin mode toggle button (always visible, bottom-left) -->
 <button class="dev-toggle" id="devToggle">⚙ ADMIN</button>
 
@@ -1428,6 +1455,20 @@ function triggerJump() {
   document.getElementById('jumpCount').textContent = jumpBursts;
 }
 document.getElementById('devJumpBtn').onclick = () => adminStage('jump');
+
+// ── JUMP live counter — 实时"正在一起跳的人数"（P1-3）──────────
+// 每收一个 jump 事件刷新人数 + 弹出，2.5s（对齐服务端 10s 窗口的"短期一起跳"体感）无新跳则隐藏。
+let _jumpLiveTimer = null;
+function showJumpLive(count, need) {
+  const el = document.getElementById('jumpLive');
+  if (!el) return;
+  const c = Math.max(0, count | 0);
+  el.querySelector('.jl-count').textContent = need ? `${c} / ${need}` : `${c}`;
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  el.style.display = 'block';
+  clearTimeout(_jumpLiveTimer);
+  _jumpLiveTimer = setTimeout(() => { el.classList.remove('show'); el.style.display = 'none'; }, 2500);
+}
 
 // ── Phase 3c: PHOTO mode（合照定格）─────────────────────
 // 进入后隐藏运营 chrome（admin 面板 + chat + DEV 入口），叠彩虹边框 + SMILE 横幅 + 白光闪，
@@ -2207,6 +2248,8 @@ function handleWsEvent(ev) {
         const sp = jRec.el.querySelector('.char-sprite');
         if (sp) { sp.classList.remove('bouncing'); void sp.offsetWidth; sp.classList.add('bouncing'); }
       }
+      // 实时显示正在一起跳的人数（P1-3：之前大屏只有累计 burst 数，看不到当下几人在跳）
+      if (ev.count != null) showJumpLive(ev.count, ev.need);
       break;
     }
     case 'jump_burst':

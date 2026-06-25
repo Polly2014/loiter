@@ -282,6 +282,12 @@ static void onMqttMessage(char* topicC, byte* payload, unsigned int len) {
         if (gCb.on_phase) gCb.on_phase(doc["phase"] | 1);
         return;
     }
+    if (t == "loiter/hall/jump/progress") {
+        // 集体 JUMP 实时进度 → P2-07 跳跃屏显真 N/need（替换本地假倒计时）
+        if (gCb.on_jump_progress)
+            gCb.on_jump_progress(doc["count"] | 0, doc["need"] | 5);
+        return;
+    }
     if (t == "loiter/hall/reading/" + gUid) {
         if (gCb.on_reading) {
             const char* en[9];
@@ -326,6 +332,7 @@ static void mqttEnsure() {
         mqtt.subscribe(("loiter/hall/sig/" + gUid).c_str(), 1);
         mqtt.subscribe("loiter/hall/roster", 1);
         mqtt.subscribe("loiter/hall/phase", 1);
+        mqtt.subscribe("loiter/hall/jump/progress", 0);
         // 仅已输名（g_joined）后才发 auto-join；未输名时 gNick=="anon"，不发（防大屏出现幽灵 anon 小人）
         if (gNick != "anon") {
             net_publish_join();

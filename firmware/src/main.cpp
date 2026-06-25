@@ -2546,6 +2546,9 @@ static void input_p2_06_say_input(const std::set<char>& new_keys, bool enter_pre
 // P2-07: JUMP Triggered (auto-progress after 10s with fake counter)
 // ──────────────────────────────────────────────────────────────────────────────
 static int g_p2_07_last_count = -1;
+// 集体 JUMP 实时人数（由 net_on_jump_progress 更新，服务端滑动窗口权威）
+static int g_jump_live_count = 0;
+static int g_jump_need = 5;
 
 static void draw_p2_07_jump() {
     auto& d = M5Cardputer.Display;
@@ -2582,22 +2585,26 @@ static void draw_p2_07_jump() {
         g_p2_07_last_count = -1;
     }
 
-    // Dynamic: counter + bar fill
+    // Dynamic: 服务端权威的实时跳跃人数（P1-3，替换旧的本地假倒计时 elapsed/2000）
     uint32_t elapsed = millis() - g_screen_entered_ms;
-    int count = elapsed / 2000;
-    if (count > 5) count = 5;
+    int need = g_jump_need > 0 ? g_jump_need : 5;
+    int count = g_jump_live_count;
+    if (count > need) count = need;
+    if (count < 0) count = 0;
     if (count != g_p2_07_last_count) {
-        int fill_w = (bar_total * count) / 5;
-        d.fillRect(bar_x + 1, bar_y + 1, fill_w, bar_h - 2, COL_GOLD);
+        // 人数可升可降（服务端 10s 滑窗会剪枝）→ 先清整条 bar 内部再填，防残留
+        d.fillRect(bar_x + 1, bar_y + 1, bar_total - 2, bar_h - 2, COL_LEFT_BG_B);
+        int fill_w = (bar_total - 2) * count / need;
+        if (fill_w > 0) d.fillRect(bar_x + 1, bar_y + 1, fill_w, bar_h - 2, COL_GOLD);
 
         // Counter
         d.setFont(&fonts::Font0);
         d.setTextDatum(middle_center);
         d.setTextSize(1);
-        d.fillRect(SCREEN_W/2 - 20, bar_y + 14, 40, 10, COL_FRAME_BG);
+        d.fillRect(SCREEN_W/2 - 24, bar_y + 14, 48, 10, COL_FRAME_BG);
         d.setTextColor(COL_GOLD, COL_FRAME_BG);
-        char cbuf[10];
-        snprintf(cbuf, sizeof(cbuf), "%d / 5", count);
+        char cbuf[12];
+        snprintf(cbuf, sizeof(cbuf), "%d / %d", count, need);
         d.drawString(cbuf, SCREEN_W/2, bar_y + 18);
 
         g_p2_07_last_count = count;
@@ -3305,6 +3312,13 @@ static void net_on_reading(const char* title, const char* title_cn, const char* 
 static void net_on_anon(const char* text) {
     Serial.printf("[net] anon: %s\n", text);
 }
+// 集体 JUMP 实时人数（jump/progress 广播）→ P2-07 跳跃屏显真 N/need（替换本地假倒计时）；
+// g_jump_live_count/g_jump_need 在 draw_p2_07_jump 上方声明（使用点之前）
+static void net_on_jump_progress(int count, int need) {
+    g_jump_live_count = count;
+    if (need > 0) g_jump_need = need;
+    // P2-07 每帧重绘（在 needs_animation_redraw）→ 下一帧自然拿到新人数，无需强踢 g_dirty
+}
 static void net_on_sig_recv(int particle, int action, const char* from_nick) {
     // 近距 shake 复制成功 → 对方降临 sig 收进背包 owned + 切 current 展示，replay 入场动画预览
     Serial.printf("[net] sig recv particle=%d action=%d from=%s\n", particle, action, from_nick);
@@ -3351,6 +3365,7 @@ void setup() {
     cb.on_phase       = net_on_phase;
     cb.on_reading     = net_on_reading;
     cb.on_anon        = net_on_anon;
+    cb.on_jump_progress = net_on_jump_progress;
     cb.on_sig_recv    = net_on_sig_recv;
     cb.redraw         = net_redraw;
     net_begin(cb);
