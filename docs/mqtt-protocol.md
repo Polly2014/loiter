@@ -65,6 +65,7 @@ loiter/<room>/<topic>[/<sub>]
 | `loiter/hall/hi/result/<uid>` | S→C | 1 | 见下 | 定向推送 HI 进展 |
 | `loiter/hall/roster` | S→all | 1+retain | `{members:[{uid,nick,island}], ts}` | 在线名册（仅已分岛成员），设备缓存用于 `HI <nick>` 补全 |
 | `loiter/hall/jump` | C→S | 1 | `{uid}` | 集体跳，10s 窗口聚合 ≥5 人触发 |
+| `loiter/hall/jump/progress` | S→all | 0 | `{count, need}` | 实时跳跃进度（窗口内人数 count / 阈值 need）→ 设备 P2-07 显真 N/need（替换本地假倒计时） |
 | `loiter/hall/anon` | C→S | 1 | `{uid, text}` | 匿名公屏（≤30 char，每人 60s 1 条） |
 | `loiter/hall/sig` | C→S | 1 | `{uid, particle, action}` | `/sig` 即时动作广播 |
 | `loiter/hall/phase` | S→all | 1+retain | `{phase: 1\|2\|3}` | host 控制全场阶段切换 |
@@ -114,6 +115,7 @@ loiter/<room>/<topic>[/<sub>]
 ```
 > `island=-1` 未分配时 `island_color="#888888"`（fallback，不空转 CSS）。
 > `x/y` 是**服务端归一化坐标**（逻辑画布 1920×1080）；大屏地图 2752×1536，自行映射。
+> snapshot 帧还带顶层 `stage:{dim,reveal,photo}`（host 控场持久态，内存态、server 重启清零）→ 晚到/刷新的大屏据此追赶当前 reveal/dim/photo。
 
 ### 事件类型（server→大屏）
 | type | 触发 | 关键字段 |
@@ -125,11 +127,13 @@ loiter/<room>/<topic>[/<sub>]
 | `status` | 5s 心跳 | `count` |
 | `island_assign` | quiz 完成登岛 | `uid, island, island_color, spectrum` |
 | `hi_arc` | HI 握手成功（P3） | `a, b`（双方 uid）, `a_spectrum, b_spectrum`（换色后各自 5 格，大屏即时刷新）（跨海彩虹弧） |
+| `jump` | 单人 JUMP | `uid`（小人弹跳）, `count, need`（当前窗口内一起跳的人数 / 阈值 → 大屏实时人数胶囊） |
 | `jump_burst` | ≥5 人 JUMP | `count` |
 | `anon_msg` | 匿名公屏 | `text`（已剥离身份） |
 | `sig_cast` | `/sig` 即时动作 | `uid, particle, action` |
 | `sig_copy` | 近距同时 shake 复制对方降临 sig | `a, b, a_particle, b_particle` |
 | `phase_change` | 阶段切换 | `phase` |
+| `stage` | host 控场（DIM/REVEAL/JUMP/PHOTO） | `action`（`dim/undim/reveal/unreveal/jump/photo/unphoto`，`POST /admin/stage` 触发）；dim/reveal/photo 持久态注入 snapshot `stage:{dim,reveal,photo}` 供晚到客户端追赶 |
 | `reading_reveal` | Phase 3 个人解读生成 | `uid, nick, title, lines[3], island, color, spectrum`（大屏只用 EN `title`/`lines`；CN 字段仅设备端 MQTT payload 有） |
 
 ---
