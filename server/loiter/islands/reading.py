@@ -25,6 +25,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -39,6 +40,54 @@ MODEL = os.getenv("LOITER_NPC_MODEL", "claude-sonnet-4.5").strip()
 ENABLED = os.getenv("LOITER_NPC_ENABLED", "true").strip().lower() in ("true", "1", "yes")
 TIMEOUT = float(os.getenv("LOITER_READING_TIMEOUT", "12").strip())
 RETRIES = int(os.getenv("LOITER_READING_RETRIES", "2").strip())
+# B′ 语义选岛的短超时（在 /flash/profile 临界路径，不能拖太久，超时即走 hash 兑底）。
+_CLASSIFY_TIMEOUT = float(os.getenv("LOITER_CLASSIFY_TIMEOUT", "8").strip())
+
+
+def _hash_island(seed: str) -> int:
+    """确定性 hash → 岛 idx。用 sha256 而非内置 hash()：后者被 PYTHONHASHSEED 每进程随机化，
+    会破坏跨重启 / Reset 同岛的稳定性（B′ 硬约束：profile_id→island 必须稳定）。"""
+    h = hashlib.sha256((seed or "").encode("utf-8")).hexdigest()
+    return int(h, 16) % len(ISLANDS)
+
+
+_CLASSIFY_SYSTEM = (
+    "You place a person onto ONE of six color-islands at a Pride workshop, "
+    "based on a few free words they wrote. Pick the island whose spirit best matches them. "
+    "Respond with ONLY a single digit 0-5 — nothing else."
+)
+
+
+def classify_island(text: str) -> int:
+    """B′ 语义选岛（同步、短超时）：LLM 读用户自由文本 → 选最配的岛 idx 0-5。
+
+    “根据你写的话决定你的岛”（比顺序轮转更合理 + 体验更好）。
+    失败 / 超时 / 非法输出 / 空文本 / NPC 关 → hash(text)%6 兑底（确定性、均衡、Reset 安全）。
+    永不抛。调用方需在线程池里跑（httpx 阻塞）。
+    """
+    text = (text or "").strip()
+    if not ENABLED or not text:
+        return _hash_island(text)
+    islands_desc = "\n".join(f"{i.idx}: {i.name} — {i.biome}; {i.traits}" for i in ISLANDS)
+    user = f"The six islands:\n{islands_desc}\n\nThey wrote: {text[:400]}\n\nWhich island (0-5)?"
+    payload = {
+        "model": MODEL,
+        "messages": [{"role": "system", "content": _CLASSIFY_SYSTEM},
+                     {"role": "user", "content": user}],
+        "max_tokens": 4, "temperature": 0.3,
+    }
+    import httpx
+    try:
+        resp = httpx.post(ENDPOINT, headers={"X-Client-Id": "loiter"}, json=payload, timeout=_CLASSIFY_TIMEOUT)
+        resp.raise_for_status()
+        raw = resp.json()["choices"][0]["message"]["content"].strip()
+        m = re.search(r"[0-5]", raw)
+        if m:
+            return int(m.group())
+        log.warning("classify_island unparseable: %r", raw[:40])
+    except Exception:
+        log.warning("classify_island call failed", exc_info=True)
+    return _hash_island(text)
 
 # Designer 原设计调性（V4 Plan 锁定）：俏皮 + 温暖，像朋友对朋友的观察，会心微笑的真诚。
 # 双语：英文 title + 中文副标题 + 核心句 + 9 行英文 + 9 行中文（设备 P3-03 三页 ×3 行 / Designer 原版）。

@@ -1,11 +1,11 @@
 """烧录 profile 存储 — v3′ 中心化分岛（SQLite 持久化）。
 
-`POST /flash/profile {text}` → 原子顺序轮转分岛（counter++%6）+ 存档 + 返回 profile_id。
-设备 join 带 profile_id → `get()` 查回 island/text/reason；未知 pid → `adopt()` 兜底轮转。
+`POST /flash/profile {text}` → B′ 语义选岛（LLM 读文本同步定岛，超时→hash(text)%6）+ 存档 + 返回 profile_id。
+设备 join 带 profile_id → `get()` 查回 island/text/reason；未知 pid → `adopt()` 用 hash(pid) 兜底定岛。
 
 为什么 SQLite 而非内存：烧录（profile 创建）与设备 join 之间有时间差，可能跨一次
 loiter 重启 → 内存会丢 → 设备拿 profile_id 来 join 时 server 不认识。持久化 + orphan
-adopt 双保险。轮转计数器 `meta.seq` 也持久化，重启后不从 0 重来（Reset/rejoin 只查不增）。
+adopt 双保险。B′：岛由文本语义/哈希确定性定，创建即持久化、不可变（Reset/rejoin 只查不改）。
 
 线程安全：FastAPI async 端点 + 异步 reason worker 可能并发 → 全程 `_lock` + 每次新游标。
 """
@@ -19,7 +19,7 @@ from pathlib import Path
 
 from . import config
 from .islands.assignment import ISLANDS
-from .islands.reading import island_reason_fallback
+from .islands.reading import island_reason_fallback, _hash_island
 
 N_ISLANDS = len(ISLANDS)
 
@@ -57,18 +57,7 @@ class ProfileStore:
             )
             self._db.commit()
 
-    # --- 内部：原子轮转下一个岛 ---
-    def _next_island_locked(self) -> int:
-        cur = self._db.execute("SELECT value FROM meta WHERE key='seq'")
-        row = cur.fetchone()
-        seq = row["value"] if row else 0
-        island = seq % N_ISLANDS
-        self._db.execute(
-            "INSERT INTO meta(key, value) VALUES('seq', ?) "
-            "ON CONFLICT(key) DO UPDATE SET value=?",
-            (seq + 1, seq + 1),
-        )
-        return island
+    # --- 内部：确定性哈希分岛见 reading._hash_island（B′：废弃顺序轮转 counter）---
 
     @staticmethod
     def _row_to_dict(row: sqlite3.Row) -> dict:
@@ -82,12 +71,18 @@ class ProfileStore:
         }
 
     # --- 公开 API ---
-    def create(self, text: str) -> dict:
-        """烧录时创建 profile：原子分岛 + 存原文（截断）。返回含 profile_id/island。"""
+    def create(self, text: str, island: int | None = None) -> dict:
+        """烧录时创建 profile：持久化 island + 原文（截断）。返回含 profile_id/island。
+
+        B′：island 由调用方（main.py）先语义选定再传入 → 创建时即持久化、不可再变。
+        island 缺省 None → hash(text)%6 兑底（供测试 / 调用方未分类时，仍确定性）。
+        """
         pid = uuid.uuid4().hex
         text = (text or "")[:500]
+        if island is None:
+            island = _hash_island(text)
+        island = int(island) % N_ISLANDS
         with self._lock:
-            island = self._next_island_locked()
             self._db.execute(
                 "INSERT INTO profiles(pid, island, text, created_at) VALUES(?,?,?,?)",
                 (pid, island, text, _now()),
@@ -97,12 +92,15 @@ class ProfileStore:
                 "reason_en": "", "reason_cn": "", "created_at": _now()}
 
     def adopt(self, pid: str) -> dict:
-        """orphan join：server 不认识的 profile_id → 轮转一个新岛 + 模板 reason，落档保 rejoin 一致。"""
+        """orphan join：server 不认识的 profile_id → hash(pid)%6 定岛 + 模板 reason，落档保 rejoin 一致。
+
+        B′：用 hash(pid) 而非轮转计数器 → 同 pid 永远同岛（确定性 + 跨重启稳定）。orphan 无原文可分类。
+        """
         with self._lock:
             existing = self._db.execute("SELECT * FROM profiles WHERE pid=?", (pid,)).fetchone()
             if existing is not None:
                 return self._row_to_dict(existing)
-            island = self._next_island_locked()
+            island = _hash_island(pid)
             en, cn = island_reason_fallback(island)
             self._db.execute(
                 "INSERT INTO profiles(pid, island, text, reason_en, reason_cn, created_at) "

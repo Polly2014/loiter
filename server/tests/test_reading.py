@@ -74,6 +74,15 @@ def test_spectrum_summary():
     assert "EMBER" in s
 
 
+def test_classify_island_hash_fallback():
+    # B′：NPC 关 → classify_island 走 hash(text)%6，确定性 + 在范围内 + 同文本同岛
+    from loiter.islands.assignment import ISLANDS
+    for t in ("warm and curious", "我喜欢安静", "", "🌈 fierce"):
+        a = reading.classify_island(t)
+        assert 0 <= a < len(ISLANDS)
+        assert a == reading.classify_island(t) == reading._hash_island(t), t
+
+
 if __name__ == "__main__":
     test_fallback_shape()
     test_parse_valid()
@@ -81,4 +90,5 @@ if __name__ == "__main__":
     test_parse_markdown_fence()
     test_parse_garbage()
     test_spectrum_summary()
+    test_classify_island_hash_fallback()
     print("✅ reading 引擎单测通过")

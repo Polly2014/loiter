@@ -191,7 +191,7 @@ def _gen_reason_blocking(pid: str, text: str, island: int) -> None:
 
 @app.post("/flash/profile")
 async def flash_profile(request: Request, body: dict | None = None):
-    """烧录时建 profile：原子顺序轮转分岛 + 异步预生成文艺 reason，并随响应下发 broker 凭据。
+    """烧录时建 profile：B′ 语义选岛（读用户文本同步定岛）+ 异步预生成文艺 reason，并随响应下发 broker 凭据。
 
     零 token：受「烧录窗口开（host 控） + 每 IP 限流」双门控。
     body `{"text": "..."}`。返回 `{ok, profile_id, mqtt:{host,port,user,pass}}`
@@ -204,9 +204,14 @@ async def flash_profile(request: Request, body: dict | None = None):
     text = (body or {}).get("text", "")
     if not isinstance(text, str):
         raise HTTPException(status_code=400, detail="text (str) required")
-    p = _profile_store.create(text)
-    # 编译/烧录窗口内异步生成 reason（join 时已就绪 → 揭晓零延迟）
-    asyncio.get_running_loop().run_in_executor(None, _gen_reason_blocking, p["profile_id"], text, p["island"])
+    # B′：先语义选岛（同步、短超时，run_in_executor 不阻塞事件循环）→ 岛在返回 profile_id 前
+    # 就确定并持久化、不可再变（保住 profile_id→island 稳定 + Reset/rejoin 同岛 + join 零等待）。
+    from .islands.reading import classify_island
+    loop = asyncio.get_running_loop()
+    island = await loop.run_in_executor(None, classify_island, text)
+    p = _profile_store.create(text, island)
+    # 编译/烧录窗口内异步补 reason（基于已持久化的 island；join 时已就绪 → 揭晓零延迟）
+    loop.run_in_executor(None, _gen_reason_blocking, p["profile_id"], text, p["island"])
     return {
         "ok": True,
         "profile_id": p["profile_id"],
