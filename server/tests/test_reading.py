@@ -83,6 +83,16 @@ def test_classify_island_hash_fallback():
         assert a == reading.classify_island(t) == reading._hash_island(t), t
 
 
+def test_classify_island_httpx_missing_falls_back(monkeypatch):
+    # Codex P1：httpx 缺失（optional dep 未装）+ NPC 开 → 必须走 hash 兜底、不抛，
+    # 否则 /flash/profile 会 500（classify 在 create 前被 await）。
+    import sys
+    monkeypatch.setattr(reading, "ENABLED", True)
+    monkeypatch.setitem(sys.modules, "httpx", None)  # import httpx → ImportError
+    out = reading.classify_island("fiery and bright")
+    assert out == reading._hash_island("fiery and bright")
+
+
 if __name__ == "__main__":
     test_fallback_shape()
     test_parse_valid()

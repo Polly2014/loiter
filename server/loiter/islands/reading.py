@@ -76,8 +76,8 @@ def classify_island(text: str) -> int:
                      {"role": "user", "content": user}],
         "max_tokens": 4, "temperature": 0.3,
     }
-    import httpx
     try:
+        import httpx   # base dep；缺失也必须走 hash 兜底，不能让 /flash/profile 500（Codex P1）
         resp = httpx.post(ENDPOINT, headers={"X-Client-Id": "loiter"}, json=payload, timeout=_CLASSIFY_TIMEOUT)
         resp.raise_for_status()
         raw = resp.json()["choices"][0]["message"]["content"].strip()
