@@ -548,7 +548,15 @@ static void drawNetSplash() {
 
 void net_begin(const NetCallbacks& cb) {
     gCb = cb;
-    gUid = String("card-") + String((uint32_t)ESP.getEfuseMac(), HEX);
+    // uid 用全 48 位 efuse MAC（高 16 位 = 厂商序列号是设备唯一标识，绝不能丢）。
+    // 旧版 `(uint32_t)getEfuseMac()` 只取低 32 位 = MAC 前 4 字节，前 3 字节是 Espressif/M5
+    // 厂商 OUI（所有设备相同）→ 同厂商设备极易撞 uid（实测两台烧成同一个 card-ce7d7850，
+    // 大屏同 uid 共用一个 DOM、昵称/位置乱跳像两人重叠 — 2026-06-26 P0）。
+    uint64_t mac = ESP.getEfuseMac();
+    char ubuf[24];
+    snprintf(ubuf, sizeof(ubuf), "card-%04x%08x",
+             (uint16_t)(mac >> 32), (uint32_t)mac);   // 高16位(序列号) + 低32位
+    gUid = String(ubuf);
 
     prefs.begin("loiter", true);
     gSavedSSID = prefs.getString("ssid", "");
