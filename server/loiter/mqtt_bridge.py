@@ -43,6 +43,11 @@ class MqttBridge:
         self._prox_last: dict[tuple[str, str], float] = {}
         self._recent_shake: dict[str, float] = {}  # uid -> last proximity shake time (monotonic)
         self._jump_last_burst = 0.0
+        # 大屏 HUD 统计 = 服务端权威（CONNECTIONS / RAINBOW BURSTS）。客户端本地累加会因
+        # 连入时机/刷新/晚到而分叉（admin 页 vs 裸 URL 大屏数字不一致）→ 进 snapshot + 随事件
+        # 下发当前总数，所有页面收敛到同一权威值。
+        self._hi_total = 0       # 成功 HI 握手累计（CONNECTIONS）
+        self._burst_total = 0    # JUMP 彩虹爆发累计（真集体跳 + host 手动 JUMP）
         # Host 控场的持久态（dim/reveal/photo 是开关，jump 是瞬时）。后连入的大屏/观众页
         # 从 snapshot 拿到当前态做追赶，避免「reveal 后才打开的浏览器看不到 story」(P1-2)。
         self._stage = {"dim": False, "reveal": False, "photo": False}
@@ -308,6 +313,17 @@ class MqttBridge:
                 self._push_island(m)
                 self._emit_island_assign(m)
                 self.publish_roster()
+            elif data.get("fresh") and m.island >= 0 and m.spectrum is not None:
+                # 设备 Reset（硬件重启 → 本地 collection 已归一到本色）→ 服务端 spectrum
+                # 同步归一，否则大屏残留 Reset 前 HI 攒的色（设备显 1 色 / 大屏显 N 色）。
+                # 用 fresh 标志区分「Reset 重进」与「25s 心跳 join」（心跳 fresh 缺省 → 不重置）。
+                # hi_count + reading 缓存一并清，保持「重开旅程」语义一致（防 Phase 3 reading 用旧计数）。
+                if m.spectrum.filled > 1 or m.hi_count > 0 or m.reading is not None:
+                    m.spectrum.reset()
+                    m.hi_count = 0
+                    m.reading = None
+                    self._push_island(m)         # 设备重揭晓（island + reason）
+                    self._emit_island_assign(m)  # 大屏刷新 spectrum 到本色
             if (m.nick != old_nick or m.avatar != old_avatar or
                     m.sig_particle != old_sig_particle or m.sig_action != old_sig_action):
                 self._emit_profile_update(m)
@@ -526,6 +542,7 @@ class MqttBridge:
         slot_rp = rp.spectrum.add_from(requester, rq.island_color)
         rq.hi_count += 1
         rp.hi_count += 1
+        self._hi_total += 1
         log.info("HI handshake OK %s <-> %s (slots %s/%s)",
                  requester, responder, slot_rq, slot_rp)
         # S→C 双方各收一条结果（partner 昵称 + 对方岛色 + 自己填入的格位，-1=共鸣不加色）
@@ -549,6 +566,7 @@ class MqttBridge:
             "a": requester, "b": responder,
             "a_spectrum": rq.spectrum.as_list(),
             "b_spectrum": rp.spectrum.as_list(),
+            "connections": self._hi_total,   # 大屏 HUD 权威总数（防客户端本地计数分叉）
             "ts": now_ms(),
         })
 
@@ -658,8 +676,9 @@ class MqttBridge:
                             json.dumps({"count": n, "need": need}), qos=0)
         if self.jump.should_burst() and time.monotonic() - self._jump_last_burst > 3.0:
             self._jump_last_burst = time.monotonic()
+            self._burst_total += 1
             log.info("JUMP burst (n=%d)", n)
-            self._emit({"type": "jump_burst", "count": n, "ts": now_ms()})
+            self._emit({"type": "jump_burst", "count": n, "bursts": self._burst_total, "ts": now_ms()})
 
     def _handle_shake(self, data: dict) -> None:
         """move 模式近距 shake（与 JUMP 独立）→ 记时间 + 试近距 sig 交换。"""
@@ -845,6 +864,10 @@ class MqttBridge:
         """当前 Host 控场持久态（供 snapshot 给晚到客户端追赶）。"""
         return dict(self._stage)
 
+    def stats_state(self) -> dict:
+        """当前 HUD 权威统计（进 snapshot → 所有页面 CONNECTIONS/BURSTS 收敛一致）。"""
+        return {"connections": self._hi_total, "bursts": self._burst_total}
+
     def emit_stage(self, action: str) -> None:
         """Admin 控场动作（DIM/REVEAL/PHOTO 等）→ WS 广播给所有大屏 + 观众页同步。
 
@@ -854,7 +877,12 @@ class MqttBridge:
         toggle = self._STAGE_TOGGLE.get(action)
         if toggle is not None:
             self._stage[toggle[0]] = toggle[1]
-        self._emit({"type": "stage", "action": action, "ts": now_ms()})
+        evt = {"type": "stage", "action": action, "ts": now_ms()}
+        if action == "jump":
+            # host 手动 JUMP 也计入权威 BURSTS（与真集体跳一致，两路都让所有页面同步）。
+            self._burst_total += 1
+            evt["bursts"] = self._burst_total
+        self._emit(evt)
 
     def publish_notice(self, text: str, level: str = "info") -> None:
         self.client.publish(config.topic("sys", "notice"),

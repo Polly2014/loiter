@@ -42,6 +42,7 @@ def _bare_bridge():
     """绕过 __init__（不连 MQTT），只装 stage 测试所需字段。"""
     b = MqttBridge.__new__(MqttBridge)
     b._stage = {"dim": False, "reveal": False, "photo": False}
+    b._burst_total = 0          # emit_stage("jump") 计入权威 BURSTS
     b._emit = lambda ev: None   # 不触发 WS 广播
     return b
 

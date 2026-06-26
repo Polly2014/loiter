@@ -43,5 +43,15 @@ class Spectrum:
                 return i
         return None
 
+    def reset(self) -> None:
+        """清空收集（保留本色），归一回登岛初态。
+
+        设备 Reset（硬件重启 → 本地 collection 已归一到本色）后，服务端 spectrum
+        用 fresh join 触发本方法同步，否则大屏残留 Reset 前 HI 攒的色。
+        """
+        home = self.slots[0]
+        self.slots = [home] + [None] * (SPECTRUM_SIZE - 1)
+        self._sources.clear()
+
     def as_list(self) -> list[str | None]:
         return list(self.slots)

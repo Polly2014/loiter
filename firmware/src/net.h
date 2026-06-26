@@ -46,7 +46,9 @@ void net_set_nick(const char* nick);
 void net_set_profile(const int shape[5], const int color[5], int sig_particle, int sig_action);
 
 // 发布（v2 topic，requester/responder 语义见 docs/mqtt-protocol.md）
-void net_publish_join();
+// fresh=true 标记「Reset/重开旅程」的首发 join（输名确认时发）→ 服务端归一 spectrum；
+// 心跳/重连 auto-join 用缺省 false，避免每 25s 抹掉 HI 攒的色。
+void net_publish_join(bool fresh = false);
 void net_publish_leave();          // C->S 主动下线/重置（服务端移除 member）
 void net_publish_profile();        // C->S profile sync (avatar/sig/nick)
 void net_publish_profile_request(); // C->S 拉取本机岛屿+reason（揭晓屏首发/重连兜底/Reset 重取）

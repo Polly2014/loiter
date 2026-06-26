@@ -729,7 +729,7 @@ static void input_p1_02_username(const std::set<char>& new_keys, bool enter_pres
         // v2: 用户名确定 → 上报 join（设备出现在大屏）
         net_set_nick(g_username);
         net_set_profile(g_shape, g_color, g_sig_particle, g_sig_action);
-        net_publish_join();
+        net_publish_join(true);   // fresh=true：重开旅程 → server 归一 spectrum（清 Reset 前 HI 攒的色）
         g_joined = true;   // 标记已上线：心跳从此刻起维持小人（含未分岛中心位）
         goto_screen(P1_03_DRESSUP);
     }
@@ -1650,7 +1650,6 @@ static void draw_lm_sidebar() {
     };
     row("H", "Hi");
     row("A", "Anonymous");
-    row("J", "Jump");
     row("M", "Move");
 
     y += 2;
@@ -1874,11 +1873,6 @@ static void input_p2_01_live_mirror(const std::set<char>& new_keys, bool enter_p
             g_say_text[0] = '\0';
             g_say_len = 0;
             goto_screen(P2_06_SAY_INPUT);
-            return;
-        } else if (up == 'J') {
-            loiter_beep(659, 30);   // E5
-            net_publish_jump();     // C→S 集体跳（10s 窗口 ≥5 人 → 大屏 jump_burst）
-            goto_screen(P2_07_JUMP);
             return;
         } else if (up == 'B') {
             loiter_beep(1175, 30);  // D6

@@ -611,6 +611,26 @@ html, body {
   line-height: 2.0;
 }
 
+/* Story card 引导线：从小人指向漂到空海的卡片（小人那头最亮 + 锚点圆点，避免被卡片盖住看不见）*/
+.story-leader {
+  position: absolute;
+  height: 3px;
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, rgba(248,225,160,.95), rgba(248,225,160,.45));
+  box-shadow: 0 0 6px rgba(248,225,160,.7);
+  border-radius: 2px;
+  z-index: 88;
+  pointer-events: none;
+}
+.story-leader::before {
+  content: '';
+  position: absolute;
+  left: -3px; top: 50%; margin-top: -4px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #f8e1a0;
+  box-shadow: 0 0 7px rgba(248,225,160,.95);
+}
+
 /* ── HI particle effects (ported from signature_actions.html) ── */
 .map-particle {
   position: absolute;
@@ -1406,7 +1426,7 @@ document.getElementById('devBurstBtn').onclick = () => {
 const JUMP_COLORS = ['#FF4444','#FF8833','#FFDD22','#44CC44','#4488FF','#BB44FF'];
 let jumpBursts = 0;
 
-function triggerJump() {
+function triggerJump(serverTotal) {
   // White flash
   const flash = document.createElement('div');
   flash.className = 'jump-flash';
@@ -1450,8 +1470,8 @@ function triggerJump() {
   }
   requestAnimationFrame(frame);
   log('🎉 JUMP — 全场彩虹粒子爆炸！', 'log-event');
-  // increment burst counter in status bar
-  jumpBursts++;
+  // burst counter：优先用服务端权威总数（snapshot/事件下发），否则本地 ++（dev 离线 mock）
+  if (serverTotal != null) jumpBursts = serverTotal; else jumpBursts++;
   document.getElementById('jumpCount').textContent = jumpBursts;
 }
 document.getElementById('devJumpBtn').onclick = () => adminStage('jump');
@@ -1783,6 +1803,7 @@ function showStoryDots() {
 
     // Hover: show story card
     let card = null;
+    let leader = null;
     dot.addEventListener('mouseenter', () => {
       // 优先用服务端 reading_reveal 下发的真实数据，dev mock 时回落 FAKE
       const spec = (ch.spectrum && ch.spectrum.length)
@@ -1827,17 +1848,42 @@ function showStoryDots() {
         card.appendChild(textEl);
       }
 
-      // Position near dot, keep within map bounds
-      const r   = mw.getBoundingClientRect();
-      const dx  = px / 100 * r.width;
-      const dy  = py / 100 * r.height;
-      const cx  = Math.max(4, Math.min(r.width  - 228, dx - 105));
-      const cy  = Math.max(4, Math.min(r.height - 160, dy - 150));
-      card.style.left = cx + 'px';
-      card.style.top  = cy + 'px';
-      mw.appendChild(card);
+      // ── 卡片漂向「背离本岛聚类中心」方向（=朝空海），不盖同岛邻居 + 画引导线 ──
+      const r  = mw.getBoundingClientRect();
+      const dx = px / 100 * r.width;     // 小人屏幕坐标（px）
+      const dy = py / 100 * r.height;
+      mw.appendChild(card);              // 先入 DOM 量真实尺寸（高度随 reading 行数变）
+      const cw  = card.offsetWidth  || 280;
+      const chh = card.offsetHeight || 200;
+      // 同岛聚类质心（px）；独自一人/恰在心 → 退化为地图中心反方向（朝最近的海）
+      const mates = activeChars.filter(c => c.island === ch.island);
+      let mcx = 0, mcy = 0;
+      mates.forEach(c => { mcx += parseFloat(c.el.style.left) || 0; mcy += parseFloat(c.el.style.top) || 0; });
+      mcx = mcx / mates.length / 100 * r.width;
+      mcy = mcy / mates.length / 100 * r.height;
+      let vx = dx - mcx, vy = dy - mcy, vlen = Math.hypot(vx, vy);
+      if (vlen < 6) { vx = dx - r.width / 2; vy = dy - r.height / 2; vlen = Math.hypot(vx, vy) || 1; }
+      vx /= vlen; vy /= vlen;
+      const GAP = 46;
+      const ccx = dx + vx * (GAP + cw / 2);   // 期望的卡片中心
+      const ccy = dy + vy * (GAP + chh / 2);
+      const cl = Math.max(6, Math.min(r.width  - cw  - 6, ccx - cw / 2));
+      const ct = Math.max(6, Math.min(r.height - chh - 6, ccy - chh / 2));
+      card.style.left = cl + 'px';
+      card.style.top  = ct + 'px';
+      // 引导线：小人 → 卡片实际中心（clamp 后）
+      const tcx = cl + cw / 2, tcy = ct + chh / 2;
+      const llen = Math.hypot(tcx - dx, tcy - dy);
+      const lang = Math.atan2(tcy - dy, tcx - dx);
+      leader = document.createElement('div');
+      leader.className = 'story-leader';
+      leader.style.left = dx + 'px';
+      leader.style.top  = dy + 'px';
+      leader.style.width = llen + 'px';
+      leader.style.transform = `rotate(${lang}rad)`;
+      mw.appendChild(leader);
     });
-    dot.addEventListener('mouseleave', () => { card?.remove(); card = null; });
+    dot.addEventListener('mouseleave', () => { card?.remove(); card = null; leader?.remove(); leader = null; });
   });
 
   triggerPhase3Climax();   // 饱和度跳升 + 中央彩虹弧 + 白光闪
@@ -1935,28 +1981,7 @@ function _pickName() {
   return name;
 }
 
-// Drag support: moves the anchor (feet position) to follow cursor
-function _makeDraggable(anchor) {
-  let dragging = false;
-  const wrap = anchor.querySelector('.char-wrap');
-
-  wrap.addEventListener('mousedown', e => {
-    dragging = true;
-    e.preventDefault();
-    anchor.style.zIndex = 250;
-  });
-  window.addEventListener('mousemove', e => {
-    if (!dragging) return;
-    const mw = document.querySelector('.map-wrap');
-    const r  = mw.getBoundingClientRect();
-    anchor.style.left = Math.max(0, Math.min(100, (e.clientX - r.left)  / r.width  * 100)).toFixed(2) + '%';
-    anchor.style.top  = Math.max(0, Math.min(100, (e.clientY - r.top)   / r.height * 100)).toFixed(2) + '%';
-  });
-  window.addEventListener('mouseup', () => {
-    if (dragging) { dragging = false; anchor.style.zIndex = ''; }
-  });
-}
-
+// Phase 3b story dots — hover 小人看 story（卡片漂空海 + 引导线，不再拖拽小人）
 function addCharacter() {
   // WS 连上后默认禁用 dev 出生（避免与 island-aware 出生点混用，review 小龙虾 #2）；
   // WS 连上后默认禁用 dev 出生（避免与 island-aware 出生点混用，review 小龙虾 #2）；
@@ -1977,7 +2002,6 @@ function addCharacter() {
       <div class="char-sprite ${skin}"></div>
     </div>`;
   document.querySelector('.map-wrap').appendChild(anchor);
-  _makeDraggable(anchor);
   activeChars.push({ el: anchor, name });
   log(`★ ${name} arrived`, 'log-join');
 }
@@ -2123,7 +2147,6 @@ function wsSpawn(uid, nick, island, x, y, avatar = null) {
     anchor.style.left = (1376 / 2752 * 100).toFixed(2) + '%';
     anchor.style.top  = (768 / 1536 * 100).toFixed(2) + '%';
     document.querySelector('.map-wrap').appendChild(anchor);
-    _makeDraggable(anchor);
     rec = { el: anchor, name: nick, uid, island: -99, avatar: null, sigParticle: -1 };
     wsChars.set(uid, rec);
     activeChars.push(rec);   // 让 triggerHI / showStoryDots 也能用到 WS 小人
@@ -2204,6 +2227,9 @@ function handleWsEvent(ev) {
       });
       _setOnlineCount(ev.count != null ? ev.count : wsChars.size);
       log(`◈ Snapshot · ${ev.count != null ? ev.count : wsChars.size} online`, 'log-conn');
+      // HUD 计数服务端权威 → 晚到/刷新页面也收敛一致（admin 页 vs 裸 URL 大屏不再分叉）
+      if (ev.connections != null) { hiConnects = ev.connections; document.getElementById('connectCount').textContent = hiConnects; }
+      if (ev.bursts != null) { jumpBursts = ev.bursts; document.getElementById('jumpCount').textContent = jumpBursts; }
       // 追赶 host 控场持久态 → 晚到/刷新的浏览器也能看到当前 reveal/dim/photo（P1-2）
       if (ev.stage) {
         if (ev.stage.dim) triggerDim(); else clearDim();
@@ -2238,7 +2264,8 @@ function handleWsEvent(ev) {
       // 握手即换色 → 两端 spectrum 立即刷新（服务端权威态）
       if (a && ev.a_spectrum) wsRenderSpectrum(a, ev.a_spectrum);
       if (b && ev.b_spectrum) wsRenderSpectrum(b, ev.b_spectrum);
-      hiConnects++;
+      // CONNECTIONS 服务端权威：优先用下发总数，否则本地 ++（向后兼容旧 server）
+      if (ev.connections != null) hiConnects = ev.connections; else hiConnects++;
       document.getElementById('connectCount').textContent = hiConnects;
       break;
     }
@@ -2253,7 +2280,7 @@ function handleWsEvent(ev) {
       break;
     }
     case 'jump_burst':
-      triggerJump();   // 自带 #jumpCount 递增
+      triggerJump(ev.bursts);   // 服务端权威 burst 总数（缺省回落本地 ++）
       log(`🎉 JUMP burst (${ev.count || ''})`, 'log-event');
       break;
     case 'anon_msg':
@@ -2324,7 +2351,7 @@ function handleWsEvent(ev) {
         case 'undim':     clearDim(); break;
         case 'reveal':    if (!storyDotsActive) showStoryDots(); break;
         case 'unreveal':  if (storyDotsActive) clearStoryDots(); break;
-        case 'jump':      triggerJump(); break;
+        case 'jump':      triggerJump(ev.bursts); break;
         case 'photo':     enterPhotoMode(); break;
         case 'unphoto':   exitPhotoMode(); break;
       }

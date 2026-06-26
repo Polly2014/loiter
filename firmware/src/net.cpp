@@ -78,12 +78,13 @@ void net_set_profile(const int shape[5], const int color[5], int sig_particle, i
     gProfileSigAction = sig_action;
 }
 
-void net_publish_join() {
+void net_publish_join(bool fresh) {
     if (!gMqttUp) return;
     JsonDocument doc;
     fillProfile(doc);
     doc["fw_ver"] = FW_VERSION;
     doc["profile_id"] = LOITER_PROFILE_ID;  // v3'：baked 一次性身份，server 据此分岛
+    if (fresh) doc["fresh"] = true;          // Reset/重开旅程 → server 归一 spectrum（心跳不带）
     char buf[360];
     size_t n = serializeJson(doc, buf, sizeof(buf));
     mqtt.publish(tp("join").c_str(), (const uint8_t*)buf, n, false);

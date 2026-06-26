@@ -259,6 +259,7 @@ async def ws_endpoint(ws: WebSocket):
     snap = {"type": "snapshot", **room.snapshot()}
     if bridge is not None:
         snap["stage"] = bridge.stage_state()
+        snap.update(bridge.stats_state())   # connections/bursts → HUD 计数服务端权威，所有页面收敛一致
     await ws.send_json(snap)
     try:
         while True:
